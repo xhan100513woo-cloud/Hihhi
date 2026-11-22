@@ -46,3 +46,15 @@ node webhook.js cp 뮤츠 15 14 15 40
 node webhook.js 개체 리자몽 2889 158
 ```
 웹훅 URL은 비밀번호처럼 다뤄 주세요 (아는 사람은 누구나 채널에 글을 쓸 수 있습니다).
+
+## Railway 로 24시간 실행하기
+저장소 루트의 `package.json` / `railway.json` 으로 바로 배포됩니다 (`npm start` → `node bot/index.js`).
+
+1. https://railway.com 에 GitHub 로 가입
+2. **New Project → Deploy from GitHub repo → Hihhi** 선택 (Root Directory 는 비워 둠)
+3. 서비스의 **Variables** 에 추가
+   - `DISCORD_TOKEN` = 봇 토큰 (필수)
+   - `WEBHOOK_URL` = 웹훅 주소 (선택)
+   - `DEX_CHANNELS` = `일반` (선택, 기본값)
+   - `GUILD_ID` = 서버 ID (선택)
+4. 배포 로그에 `✅ ... 로그인 완료` 가 보이면 `#일반` 에 `111` 입력해서 확인
