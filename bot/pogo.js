@@ -135,7 +135,15 @@ function findIVs(S, cp, hp, floor = 0) {
   return res;
 }
 
-module.exports = {
+/** 메시지가 도감번호만으로 이루어져 있으면 번호를 돌려준다 (예: "25", "#150", "No.6", "6번") */
+function parseDexNumber(content) {
+  const m = String(content).trim().match(/^(?:#|no\.?\s*)?0*(\d{1,4})(?:번)?$/i);
+  if (!m) return null;
+  const id = Number(m[1]);
+  return DEX[id] ? id : null;
+}
+
+module.exports = { parseDexNumber,
   DEX, CPM, MAX_ID, TYPES, TYPE_COLOR, CHART, effectiveness, formLabel,
   calcCP, calcHP, cpmAt, levels, findId, suggest, pickForm, defenseGroups, bestLeagueLevel, findIVs,
 };

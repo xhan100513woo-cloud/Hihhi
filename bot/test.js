@@ -7,6 +7,11 @@ const P = require("./pogo");
 
 assert.strictEqual(commands.length, 3);
 
+// 채널 도감번호 감지
+for (const [txt, want] of [["25", 25], [" 6 ", 6], ["#150", 150], ["No.6", 6], ["no 6", 6], ["006", 6], ["6번", 6],
+  ["1025", 1025], ["0", null], ["9999", null], ["25마리 잡았다", null], ["안녕 25", null], ["3.5", null], ["", null]])
+  assert.strictEqual(P.parseDexNumber(txt), want, txt);
+
 // 알려진 값
 assert.strictEqual(P.calcCP(P.DEX[6].forms[0].s, [15, 15, 15], 40), 2889);   // 리자몽
 assert.strictEqual(P.calcCP(P.DEX[150].forms[0].s, [15, 15, 15], 40), 4178); // 뮤츠
