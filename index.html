@@ -14,6 +14,14 @@
     <datalist id="names"></datalist>
     <button type="submit">검색</button>
   </form>
+  <details id="hookPanel" class="hook">
+    <summary>디스코드 웹훅 설정</summary>
+    <div class="row">
+      <input id="hookUrl" type="url" placeholder="https://discord.com/api/webhooks/...">
+      <button id="hookSave" type="button">저장</button>
+    </div>
+    <p id="hookStatus" class="muted"></p>
+  </details>
   <div class="nav">
     <button id="prev" type="button">◀ 이전</button>
     <button id="next" type="button">다음 ▶</button>
@@ -29,6 +37,7 @@
       <div id="types" class="types"></div>
       <select id="form"></select>
       <div id="released" class="muted"></div>
+      <button id="sendDex" type="button" class="send">📤 디스코드로 보내기</button>
     </div>
   </section>
 
@@ -67,6 +76,7 @@
       <label>레벨 <input type="number" id="lvl" min="1" max="51" step="0.5" value="40"></label>
     </div>
     <div id="ivresult" class="grid"></div>
+    <button id="sendIv" type="button" class="send">📤 이 결과를 디스코드로 보내기</button>
     <details>
       <summary>이 개체의 레벨별 CP 표</summary>
       <table id="lvtable"></table>
@@ -89,6 +99,7 @@
       </label>
     </div>
     <div id="findresult"></div>
+    <button id="sendFind" type="button" class="send">📤 이 결과를 디스코드로 보내기</button>
   </section>
 </main>
 
@@ -96,6 +107,7 @@
 <footer class="muted">데이터: pogoapi.net, PokeAPI · 비공식 팬 제작 도구</footer>
 
 <script src="data.js"></script>
+<script src="config.js" onerror="void 0"></script>
 <script src="app.js"></script>
 </body>
 </html>

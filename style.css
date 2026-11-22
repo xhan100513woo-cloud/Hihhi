@@ -50,3 +50,7 @@ details { margin-top: 10px; } summary { cursor: pointer; color: var(--accent); }
 .scroll { max-height: 320px; overflow: auto; }
 footer { margin-top: 16px; text-align: center; }
 @media (max-width: 480px) { .head img { width: 88px; height: 88px; } }
+.hook { margin: 8px 0; font-size: .9rem; }
+.hook .row input { flex: 1; min-width: 0; }
+.send { margin-top: 10px; background: #5865f2; }
+.send:disabled { opacity: .7; cursor: default; }

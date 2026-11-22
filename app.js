@@ -223,3 +223,115 @@ for (const id of ["findCp", "findHp", "findFloor"]) $(id).addEventListener("inpu
 
 const start = parseInt(location.hash.slice(1), 10);
 if (DEX[start]) show(start);
+
+// ───────── 디스코드 웹훅 연동 ─────────
+// 웹훅 주소: config.js(git 에 올라가지 않음)의 window.WEBHOOK_URL 또는 화면에서 입력한 값(브라우저에 저장)
+const WEBHOOK_KEY = "pogo-webhook-url";
+function getWebhook() {
+  try { const v = localStorage.getItem(WEBHOOK_KEY); if (v) return v; } catch { /* 저장소 사용 불가 */ }
+  return window.WEBHOOK_URL || "";
+}
+const TYPE_EMOJI = {
+  Normal: "⚪", Fire: "🔥", Water: "💧", Electric: "⚡", Grass: "🌿", Ice: "❄️", Fighting: "🥊", Poison: "☠️",
+  Ground: "⛰️", Flying: "🪶", Psychic: "🔮", Bug: "🐛", Rock: "🪨", Ghost: "👻", Dragon: "🐉", Dark: "🌑",
+  Steel: "⚙️", Fairy: "✨",
+};
+const tname = (t) => `${TYPE_EMOJI[t]} ${TYPES[t][0]}`;
+const hexColor = (t) => parseInt(TYPES[t][1].slice(1), 16);
+const artUrl = (id) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+
+function baseEmbed() {
+  const { id, sp, form: f } = cur;
+  const formTxt = f.f === "Normal" ? "" : ` [${formLabel(f.f)}]`;
+  return { title: `No.${String(id).padStart(4, "0")} ${sp.ko} (${sp.en})${formTxt}`,
+    color: hexColor(f.t[0]), thumbnail: { url: artUrl(id) }, footer: { text: "포켓몬 GO 도감 · pogoapi.net" } };
+}
+
+function dexPayload() {
+  const f = cur.form, S = f.s, H = [15, 15, 15];
+  const groups = {};
+  for (const atk of TYPE_LIST) {
+    const m = f.t.reduce((acc, d) => acc * effectiveness(atk, d), 1);
+    if (Math.abs(m - 1) > 1e-9) (groups[m] = groups[m] || []).push(atk);
+  }
+  const keys = Object.keys(groups).map(Number).sort((a, b) => b - a);
+  const line = (m) => `**${fmtMult(m)}** ${groups[m].map(tname).join(", ")}`;
+  const rng = (lv, fl) => `${calcCP(S, [fl, fl, fl], lv)}~**${calcCP(S, H, lv)}**`;
+  return { ...baseEmbed(), fields: [
+    { name: "타입", value: f.t.map(tname).join(" / "), inline: true },
+    { name: "능력치 (공/방/체)", value: `${S[0]} / ${S[1]} / ${S[2]}`, inline: true },
+    { name: "GO 출시", value: cur.sp.r ? "✅ 출시" : "❌ 미출시", inline: true },
+    { name: "최대 CP (100%)", value: `Lv40 **${calcCP(S, H, 40)}**\nLv50 **${calcCP(S, H, 50)}**\nLv51 **${calcCP(S, H, 51)}**`, inline: true },
+    { name: "상황별 CP (최소~100%)", value: `리서치 Lv15: ${rng(15, 10)}\n레이드·알 Lv20: ${rng(20, 10)}\n날씨부스트 Lv25: ${rng(25, 10)}`, inline: true },
+    { name: "🔻 약점 속성", value: keys.filter((m) => m > 1).map(line).join("\n") || "없음" },
+    { name: "🛡️ 저항 속성", value: keys.filter((m) => m < 1).map(line).join("\n") || "없음" },
+    { name: "⚔️ 강점 속성 (자속 기술 ×1.6)", value: f.t.map((t) => `${tname(t)} 기술 → ${CHART[t][0].map(tname).join(", ") || "없음"}`).join("\n") },
+  ] };
+}
+
+function ivPayload() {
+  const S = cur.form.s;
+  const iv = [clampIV($("ivA").value), clampIV($("ivD").value), clampIV($("ivS").value)];
+  let lv = Math.max(1, Math.min(51, Math.round((+$("lvl").value || 1) * 2) / 2));
+  const m = cpmAt(lv), pct = Math.round((iv[0] + iv[1] + iv[2]) / 45 * 100);
+  const lg = (cap) => { let b = null; for (const l of levels()) if (calcCP(S, iv, l) <= cap) b = l; return b ? `Lv${b} · CP ${calcCP(S, iv, b)}` : "불가"; };
+  const table = [15, 20, 25, 30, 35, 40, 45, 50, 51]
+    .map((l) => `Lv${String(l).padEnd(2)}  CP ${String(calcCP(S, iv, l)).padStart(5)}  HP ${calcHP(S[2], iv[2], l)}`).join("\n");
+  return { ...baseEmbed(), description: `개체값 **${iv.join("/")}** (${pct}%) · 레벨 **${lv}**`, fields: [
+    { name: "CP", value: `**${calcCP(S, iv, lv)}**`, inline: true },
+    { name: "HP", value: `**${calcHP(S[2], iv[2], lv)}**`, inline: true },
+    { name: "실제 공/방", value: `${((S[0] + iv[0]) * m).toFixed(1)} / ${((S[1] + iv[1]) * m).toFixed(1)}`, inline: true },
+    { name: "슈퍼리그 (1500)", value: lg(1500), inline: true },
+    { name: "하이퍼리그 (2500)", value: lg(2500), inline: true },
+    { name: "레벨별 CP", value: "```\n" + table + "\n```" },
+  ] };
+}
+
+function findPayload() {
+  const cp = +$("findCp").value, hp = +$("findHp").value, floor = +$("findFloor").value;
+  if (!cp) return null;
+  const S = cur.form.s, res = [];
+  for (const lv of levels())
+    for (let a = floor; a <= 15; a++) for (let d = floor; d <= 15; d++) for (let s = floor; s <= 15; s++) {
+      if (calcCP(S, [a, d, s], lv) !== cp || (hp && calcHP(S[2], s, lv) !== hp)) continue;
+      res.push({ lv, iv: [a, d, s], pct: Math.round((a + d + s) / 45 * 100) });
+    }
+  const head = `CP **${cp}**${hp ? ` · HP **${hp}**` : ""} · 최소 개체값 ${floor}`;
+  if (!res.length) return { ...baseEmbed(), description: head + "\n일치하는 조합이 없습니다." };
+  const pcts = res.map((x) => x.pct);
+  const top = [...res].sort((x, y) => y.pct - x.pct).slice(0, 15);
+  const lines = top.map((x) => `Lv${String(x.lv).padEnd(4)} ${x.iv.map((v) => String(v).padStart(2)).join("/")}  ${String(x.pct).padStart(3)}%`).join("\n");
+  return { ...baseEmbed(), description: `${head}\n가능한 조합 **${res.length}**개 · 개체값 **${Math.min(...pcts)}% ~ ${Math.max(...pcts)}%**`,
+    fields: [{ name: `개체값 높은 순 ${top.length}개 (레벨 공/방/체)`, value: "```\n" + lines + "\n```" }] };
+}
+
+async function sendToDiscord(btn, makeEmbed) {
+  const url = getWebhook();
+  if (!/^https:\/\/(?:\w+\.)?discord(?:app)?\.com\/api\/webhooks\//.test(url)) {
+    $("hookPanel").open = true; $("hookStatus").textContent = "먼저 디스코드 웹훅 주소를 저장해 주세요.";
+    return;
+  }
+  if (!cur) return;
+  const embed = makeEmbed();
+  if (!embed) { btn.textContent = "⚠️ CP를 먼저 입력하세요"; setTimeout(() => (btn.textContent = btn.dataset.label), 2000); return; }
+  btn.disabled = true; btn.textContent = "보내는 중…";
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "포켓몬 GO 도감", embeds: [embed] }) });
+    btn.textContent = res.ok ? "✅ 보냈습니다" : `❌ 실패 (${res.status})`;
+  } catch (e) {
+    btn.textContent = "❌ 네트워크 오류";
+  }
+  setTimeout(() => { btn.textContent = btn.dataset.label; btn.disabled = false; }, 2000);
+}
+
+for (const [id, fn] of [["sendDex", dexPayload], ["sendIv", ivPayload], ["sendFind", findPayload]]) {
+  const b = $(id); b.dataset.label = b.textContent; b.onclick = () => sendToDiscord(b, fn);
+}
+$("hookUrl").value = getWebhook();
+$("hookSave").onclick = () => {
+  const v = $("hookUrl").value.trim();
+  try { v ? localStorage.setItem(WEBHOOK_KEY, v) : localStorage.removeItem(WEBHOOK_KEY); } catch { /* 저장 불가 */ }
+  $("hookStatus").textContent = v ? "저장했습니다. 이제 📤 버튼으로 채널에 보낼 수 있습니다." : "삭제했습니다.";
+};
+$("hookStatus").textContent = getWebhook() ? "웹훅이 연결되어 있습니다." : "웹훅 주소를 입력하고 저장하세요.";
