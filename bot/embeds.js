@@ -46,6 +46,14 @@ function dexEmbed(query, form) {
     { name: "🛡️ 저항 속성", value: resist },
     { name: "⚔️ 강점 속성 (자속 기술 ×1.6)", value: strong },
   ];
+  // 개체값별 CP 표
+  const ivRows = [[15, 15, 15], [15, 15, 14], [15, 14, 15], [14, 14, 14], [13, 13, 13], [12, 12, 12], [10, 10, 10]];
+  const ivTable = "개체값     %   Lv20  Lv25  Lv40  Lv50\n" + ivRows.map((iv) => {
+    const pct = Math.round((iv[0] + iv[1] + iv[2]) / 45 * 100);
+    return `${iv.map((v) => String(v).padStart(2)).join("/")}  ${String(pct).padStart(3)}  ` +
+      [20, 25, 40, 50].map((l) => String(P.calcCP(S, iv, l)).padStart(5)).join(" ");
+  }).join("\n");
+  fields.push({ name: "📊 개체값별 CP", value: "```\n" + ivTable + "\n```" });
   if (forms) fields.push({ name: "다른 폼 (`폼` 옵션에 번호 입력)", value: forms.slice(0, 1024) });
 
   return {
