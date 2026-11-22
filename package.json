@@ -1,0 +1,14 @@
+{
+  "name": "pokemon-go-dex",
+  "version": "1.0.0",
+  "description": "포켓몬 GO 도감 (웹 + 디스코드 봇)",
+  "private": true,
+  "scripts": {
+    "start": "node bot/index.js",
+    "test": "node bot/test.js"
+  },
+  "engines": { "node": "22.x" },
+  "dependencies": {
+    "discord.js": "14.28.1"
+  }
+}
