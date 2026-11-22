@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>포켓몬 GO 도감</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>포켓몬 GO 도감</h1>
+  <form id="search" autocomplete="off">
+    <input id="q" list="names" placeholder="도감번호 또는 이름 (예: 6, 리자몽)" required>
+    <datalist id="names"></datalist>
+    <button type="submit">검색</button>
+  </form>
+  <details id="hookPanel" class="hook">
+    <summary>디스코드 웹훅 설정</summary>
+    <div class="row">
+      <input id="hookUrl" type="url" placeholder="https://discord.com/api/webhooks/...">
+      <button id="hookSave" type="button">저장</button>
+    </div>
+    <p id="hookStatus" class="muted"></p>
+  </details>
+  <div class="nav">
+    <button id="prev" type="button">◀ 이전</button>
+    <button id="next" type="button">다음 ▶</button>
+  </div>
+</header>
+
+<main id="result" hidden>
+  <section class="card head">
+    <img id="art" alt="">
+    <div>
+      <div class="no" id="no"></div>
+      <h2 id="name"></h2>
+      <div id="types" class="types"></div>
+      <select id="form"></select>
+      <div id="released" class="muted"></div>
+      <button id="sendDex" type="button" class="send">📤 디스코드로 보내기</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>기본 능력치 (GO)</h3>
+    <div id="stats"></div>
+  </section>
+
+  <section class="card">
+    <h3>최대 CP (개체값 15/15/15)</h3>
+    <div id="maxcp" class="grid"></div>
+  </section>
+
+  <section class="card">
+    <h3>약점 속성 (받는 피해)</h3>
+    <div id="defense"></div>
+  </section>
+
+  <section class="card">
+    <h3>강점 속성 (자속 기술로 주는 피해)</h3>
+    <div id="offense"></div>
+  </section>
+
+  <section class="card">
+    <h3>상황별 CP 범위</h3>
+    <table id="ranges"></table>
+    <p class="muted">야생 포획 레벨은 트레이너 레벨에 따라 1~35, 날씨 부스트 시 최소 개체값 4.</p>
+  </section>
+
+  <section class="card">
+    <h3>개체값 계산기</h3>
+    <div class="ivs">
+      <label>공격 <input type="number" id="ivA" min="0" max="15" value="15"></label>
+      <label>방어 <input type="number" id="ivD" min="0" max="15" value="15"></label>
+      <label>체력 <input type="number" id="ivS" min="0" max="15" value="15"></label>
+      <label>레벨 <input type="number" id="lvl" min="1" max="51" step="0.5" value="40"></label>
+    </div>
+    <div id="ivresult" class="grid"></div>
+    <button id="sendIv" type="button" class="send">📤 이 결과를 디스코드로 보내기</button>
+    <details>
+      <summary>이 개체의 레벨별 CP 표</summary>
+      <table id="lvtable"></table>
+    </details>
+  </section>
+
+  <section class="card">
+    <h3>CP로 개체값 추정</h3>
+    <div class="ivs">
+      <label>CP <input type="number" id="findCp" min="10"></label>
+      <label>HP (선택) <input type="number" id="findHp" min="10"></label>
+      <label>최소 개체값
+        <select id="findFloor">
+          <option value="0">0 (야생)</option>
+          <option value="1">1 (친구 교환)</option>
+          <option value="4">4 (날씨 부스트)</option>
+          <option value="10">10 (레이드·알·연구)</option>
+          <option value="12">12 (최고의 친구 교환)</option>
+        </select>
+      </label>
+    </div>
+    <div id="findresult"></div>
+    <button id="sendFind" type="button" class="send">📤 이 결과를 디스코드로 보내기</button>
+  </section>
+</main>
+
+<p id="msg" class="muted"></p>
+<footer class="muted">데이터: pogoapi.net, PokeAPI · 비공식 팬 제작 도구</footer>
+
+<script src="data.js"></script>
+<script src="config.js" onerror="void 0"></script>
+<script src="app.js"></script>
+</body>
+</html>

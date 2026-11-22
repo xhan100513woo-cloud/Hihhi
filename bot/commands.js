@@ -1,0 +1,25 @@
+"use strict";
+// 슬래시 명령어 정의
+const pokemon = (o) => o.setName("포켓몬").setDescription("도감번호 또는 이름 (예: 6, 리자몽)").setRequired(true).setAutocomplete(true);
+const form = (o) => o.setName("폼").setDescription("폼 번호 또는 이름 (예: 알로라, 메가) — /도감 결과에 번호가 나옵니다");
+const { SlashCommandBuilder } = require("discord.js");
+
+module.exports = [
+  new SlashCommandBuilder().setName("도감").setDescription("포켓몬 GO 정보: 타입, 약점·강점 속성, 최대 CP")
+    .addStringOption(pokemon).addStringOption(form),
+  new SlashCommandBuilder().setName("cp").setDescription("개체값과 레벨로 CP·HP·리그 레벨 계산")
+    .addStringOption(pokemon)
+    .addIntegerOption((o) => o.setName("공격").setDescription("공격 개체값 0~15").setMinValue(0).setMaxValue(15).setRequired(true))
+    .addIntegerOption((o) => o.setName("방어").setDescription("방어 개체값 0~15").setMinValue(0).setMaxValue(15).setRequired(true))
+    .addIntegerOption((o) => o.setName("체력").setDescription("체력 개체값 0~15").setMinValue(0).setMaxValue(15).setRequired(true))
+    .addNumberOption((o) => o.setName("레벨").setDescription("1~51 (0.5 단위, 기본 40)").setMinValue(1).setMaxValue(51))
+    .addStringOption(form),
+  new SlashCommandBuilder().setName("개체").setDescription("게임에 표시된 CP(·HP)로 가능한 개체값 찾기")
+    .addStringOption(pokemon)
+    .addIntegerOption((o) => o.setName("cp").setDescription("게임에 표시된 CP").setMinValue(10).setRequired(true))
+    .addIntegerOption((o) => o.setName("hp").setDescription("게임에 표시된 HP (선택, 입력 시 정확도↑)").setMinValue(10))
+    .addIntegerOption((o) => o.setName("최소개체").setDescription("획득 방법별 최소 개체값").addChoices(
+      { name: "0 (야생)", value: 0 }, { name: "1 (친구 교환)", value: 1 }, { name: "4 (날씨 부스트)", value: 4 },
+      { name: "10 (레이드·알·연구)", value: 10 }, { name: "12 (최고의 친구 교환)", value: 12 }))
+    .addStringOption(form),
+].map((c) => c.toJSON());
