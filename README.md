@@ -21,3 +21,6 @@
 python3 scripts/build_data.py <JSON 다운로드 폴더>
 ```
 데이터 출처: [pogoapi.net](https://pogoapi.net) (GO 능력치·타입·CP 배율), [PokeAPI](https://pokeapi.co) (한국어 이름).
+
+## 디스코드 봇
+같은 기능을 디스코드 슬래시 명령어(`/도감`, `/cp`, `/개체`)로 쓸 수 있습니다. → [bot/README.md](bot/README.md)
