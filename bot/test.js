@@ -5,7 +5,25 @@ const commands = require("./commands");
 const { dexEmbed, cpEmbed, ivEmbed } = require("./embeds");
 const P = require("./pogo");
 
-assert.strictEqual(commands.length, 3);
+assert.strictEqual(commands.length, 4);
+
+// 배틀 개체 순위
+for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 150], ["배틀리자몽", 6], ["배틀하자", null], ["배틀", null], ["111배틀", null]])
+  assert.strictEqual(P.parseBattle(txt), want, txt);
+assert.strictEqual(P.parseDexNumber("배틀111"), null);
+{
+  const ml = P.pvpRanks(P.DEX[3].forms[0].s, Infinity, 50, 10);
+  assert.strictEqual(ml[0].iv.join(), "15,15,15");            // 마스터리그 1위는 15/15/15
+  for (const cap of [1500, 2500]) {
+    const r = P.pvpRanks(P.DEX[184].forms[0].s, cap, 50, 10);
+    assert.strictEqual(r.length, 10);
+    assert.ok(r.every((x) => x.cp <= cap && x.lv <= 50));     // CP 상한·레벨 상한 준수
+    assert.ok(r.every((x, i) => i === 0 || r[i - 1].sp >= x.sp)); // 스탯곱 내림차순
+  }
+  const e = require("./embeds").battleEmbed("6").embeds[0];
+  assert.strictEqual(e.fields.length, 4);
+  assert.ok(e.fields[3].name.includes("메가"));
+}
 
 // 채널 도감번호 감지
 for (const [txt, want] of [["25", 25], [" 6 ", 6], ["#150", 150], ["No.6", 6], ["no 6", 6], ["006", 6], ["6번", 6],
@@ -36,6 +54,8 @@ for (const id of Object.keys(P.DEX)) {
   P.DEX[id].forms.forEach((_, i) => { checkLimits(dexEmbed(id, String(i))); checkLimits(cpEmbed(id, 15, 15, 15, 40, String(i))); });
 }
 checkLimits(ivEmbed("6", 2889, null, 0));
+const { battleEmbed } = require("./embeds");
+for (const id of ["1", "6", "111", "150", "184", "376", "384", "1025"]) checkLimits(battleEmbed(id));
 assert.ok(dexEmbed("없는포켓몬").ephemeral);
 
 console.log(JSON.stringify(dexEmbed("리자몽").embeds[0], null, 1).slice(0, 1500));

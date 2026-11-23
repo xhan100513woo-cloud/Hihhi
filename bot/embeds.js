@@ -119,4 +119,36 @@ function ivEmbed(query, cp, hp, floor, form) {
   };
 }
 
-module.exports = { dexEmbed, cpEmbed, ivEmbed };
+/** 배틀 개체 순위 (슈퍼 / 하이퍼 / 마스터 / 메가마스터 각 10위) */
+const PVP_MAX_LV = 50;
+function battleEmbed(query, form) {
+  const r = resolve(query, form);
+  if (r.error) return err(r.error);
+  const { id, sp, f } = r;
+  const table = (rows) => rows.length
+    ? "```\n순위 개체      레벨  CP     %\n" + rows.map((x) =>
+      `${String(x.rank).padStart(2)}  ${x.iv.map((v) => String(v).padStart(2)).join("/")}  ${String(x.lv).padStart(4)} ${String(x.cp).padStart(5)} ${x.pct.toFixed(1).padStart(5)}`
+    ).join("\n") + "\n```"
+    : "참가 불가 (최저 CP가 상한을 넘습니다)";
+  const base = f.f.startsWith("MEGA:") ? sp.forms[0] : f;
+  const mega = f.f.startsWith("MEGA:") ? f : sp.forms.find((x) => x.f.startsWith("MEGA:"));
+  const fields = [
+    { name: "🔵 슈퍼리그 (CP 1500)", value: table(P.pvpRanks(base.s, 1500, PVP_MAX_LV)) },
+    { name: "🟡 하이퍼리그 (CP 2500)", value: table(P.pvpRanks(base.s, 2500, PVP_MAX_LV)) },
+    { name: "🟣 마스터리그 (CP 제한 없음)", value: table(P.pvpRanks(base.s, Infinity, PVP_MAX_LV)) },
+    { name: `🔴 메가마스터리그${mega ? ` (${P.formLabel(mega.f)})` : ""}`,
+      value: mega ? table(P.pvpRanks(mega.s, Infinity, PVP_MAX_LV)) : "메가진화가 없는 포켓몬입니다" },
+  ];
+  return {
+    embeds: [{
+      title: title(id, sp, base) + " · 배틀 개체 순위",
+      description: `최대 레벨 ${PVP_MAX_LV} 기준 · 스탯곱(공×방×HP) 순 · %는 1위 대비`,
+      color: P.TYPE_COLOR[base.t[0]],
+      thumbnail: { url: ART(id) },
+      fields,
+      footer: { text: "개체 표기: 공격/방어/체력" },
+    }],
+  };
+}
+
+module.exports = { dexEmbed, cpEmbed, ivEmbed, battleEmbed };

@@ -143,7 +143,38 @@ function parseDexNumber(content) {
   return DEX[id] ? id : null;
 }
 
-module.exports = { parseDexNumber,
+/** "배틀111", "배틀 111", "배틀#111", "배틀 리자몽" → 도감번호 */
+function parseBattle(content) {
+  const m = String(content).trim().match(/^배틀\s*(.+)$/);
+  if (!m) return null;
+  const q = m[1].trim();
+  const n = parseDexNumber(q);
+  if (n) return n;
+  for (const [id, p] of Object.entries(DEX)) if (p.ko === q || p.en.toLowerCase() === q.toLowerCase()) return +id;
+  return null;
+}
+
+/**
+ * PvP 개체 순위: 각 개체값(4096개)을 리그 CP 상한 이하의 최고 레벨(maxLv 이하)까지 올렸을 때
+ * 스탯곱(공격×방어×HP)이 큰 순서로 정렬해 상위 top 개를 돌려준다. 참가 불가면 빈 배열.
+ */
+function pvpRanks(S, cap = Infinity, maxLv = 50, top = 10) {
+  const lvls = levels(1, maxLv).reverse();
+  const res = [];
+  for (let a = 0; a <= 15; a++) for (let d = 0; d <= 15; d++) for (let s = 0; s <= 15; s++) {
+    const iv = [a, d, s];
+    const lv = lvls.find((l) => calcCP(S, iv, l) <= cap);
+    if (lv === undefined) continue;
+    const m = cpmAt(lv);
+    const sp = (S[0] + a) * m * (S[1] + d) * m * Math.floor((S[2] + s) * m);
+    res.push({ iv, lv, cp: calcCP(S, iv, lv), sp });
+  }
+  res.sort((x, y) => y.sp - x.sp || y.cp - x.cp);
+  const best = res.length ? res[0].sp : 1;
+  return res.slice(0, top).map((r, i) => ({ ...r, rank: i + 1, pct: r.sp / best * 100 }));
+}
+
+module.exports = { parseDexNumber, parseBattle, pvpRanks,
   DEX, CPM, MAX_ID, TYPES, TYPE_COLOR, CHART, effectiveness, formLabel,
   calcCP, calcHP, cpmAt, levels, findId, suggest, pickForm, defenseGroups, bestLeagueLevel, findIVs,
 };
