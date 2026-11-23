@@ -232,7 +232,12 @@ function channelMatches(channel, entries) {
   return entries.some((e) => e === "*" || e === channel.id || (normName(e) && normName(channel.name).includes(normName(e))));
 }
 
-module.exports = { channelMatches, parseDexQuery, parseDexNumber, parseBattle, pvpRanks,
+/** 봇 전용 커스텀 이모지(속성 아이콘)로 TYPES 의 이모지를 바꾼다. map: { Fire: "<:pogo_fire:123>", ... } */
+function setTypeEmojis(map) {
+  for (const [t, e] of Object.entries(map)) if (TYPES[t] && e) TYPES[t][1] = e;
+}
+
+module.exports = { setTypeEmojis, channelMatches, parseDexQuery, parseDexNumber, parseBattle, pvpRanks,
   DEX, CPM, MAX_ID, TYPES, TYPE_COLOR, CHART, effectiveness, formLabel,
   calcCP, calcHP, cpmAt, levels, findId, suggest, pickForm, defenseGroups, bestLeagueLevel, findIVs,
 };

@@ -56,6 +56,34 @@ function reportGuild(g) {
     "(채널 이름을 바꾸거나 Railway Variables 의 DEX_CHANNELS 에 채널 이름을 추가하세요. 슬래시 명령어는 어디서나 동작)");
 }
 
+/**
+ * 속성 아이콘(bot/type-icons/*.png)을 봇 전용 이모지(pogo_fire 등)로 등록하고 메시지에 사용.
+ * 봇 전용 이모지는 봇이 들어간 모든 서버에서 쓸 수 있다. 실패하면 기본 유니코드 이모지를 그대로 쓴다.
+ */
+async function setupTypeEmojis(c) {
+  try {
+    const fs = require("fs"), path = require("path");
+    const existing = await c.application.emojis.fetch();
+    const map = {};
+    let created = 0;
+    for (const t of Object.keys(P.TYPES)) {
+      const name = "pogo_" + t.toLowerCase();
+      let emoji = existing.find((e) => e.name === name);
+      if (!emoji) {
+        const file = path.join(__dirname, "type-icons", t.toLowerCase() + ".png");
+        if (!fs.existsSync(file)) continue;
+        emoji = await c.application.emojis.create({ attachment: file, name });
+        created++;
+      }
+      map[t] = `<:${emoji.name}:${emoji.id}>`;
+    }
+    P.setTypeEmojis(map);
+    console.log(`🎨 속성 아이콘 이모지 ${Object.keys(map).length}개 사용 (새로 등록 ${created}개)`);
+  } catch (e) {
+    console.error("⚠️ 속성 아이콘 이모지를 등록하지 못해 기본 이모지를 씁니다:", e.message);
+  }
+}
+
 let client;
 function start(withMessageContent) {
   const intents = [GatewayIntentBits.Guilds];
@@ -100,6 +128,7 @@ function register(client, withMessageContent) {
   });
 
   client.once(Events.ClientReady, async (c) => {
+    await setupTypeEmojis(c);
     // GUILD_ID 가 있으면 해당 서버에 즉시 등록, 없으면 전체(전파에 최대 1시간)
     if (GUILD_ID) await c.application.commands.set(commands, GUILD_ID);
     else await c.application.commands.set(commands);

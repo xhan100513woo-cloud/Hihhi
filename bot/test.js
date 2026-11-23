@@ -11,6 +11,16 @@ assert.strictEqual(commands.length, 4);
 for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 150], ["배틀리자몽", 6], ["배틀하자", null], ["배틀", null], ["111배틀", null]])
   assert.strictEqual((P.parseBattle(txt) || {}).id ?? null, want, txt);
 
+// 속성 아이콘 파일 18개 + 커스텀 이모지 치환
+{
+  const fs = require("fs"), path = require("path");
+  for (const t of Object.keys(P.TYPES)) assert.ok(fs.existsSync(path.join(__dirname, "type-icons", t.toLowerCase() + ".png")), t);
+  const before = P.TYPES.Fire[1];
+  P.setTypeEmojis({ Fire: "<:pogo_fire:123>" });
+  assert.ok(require("./embeds").dexEmbed("6").embeds[0].fields[0].value.includes("<:pogo_fire:123> 불꽃"));
+  P.setTypeEmojis({ Fire: before });
+}
+
 // 감지 채널 이름 매칭
 const ch = (name, id = "1") => ({ name, id });
 assert.ok(P.channelMatches(ch("일반"), ["일반"]));
