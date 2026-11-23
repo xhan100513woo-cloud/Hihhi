@@ -136,6 +136,7 @@ function ivEmbed(query, cp, hp, floor, form) {
 
 /** 배틀 개체 순위 (슈퍼 / 하이퍼 / 마스터 / 메가마스터 각 10위) */
 const PVP_MAX_LV = 50;
+const SHADOW_ATK = 1.2, SHADOW_DEF = 5 / 6;
 function battleEmbed(query, form) {
   const r = resolve(query, form);
   if (r.error) return err(r.error);
@@ -154,6 +155,19 @@ function battleEmbed(query, form) {
     { name: `🔴 메가마스터리그${mega ? ` (${P.formLabel(mega.f, id)})` : ""}`,
       value: mega ? table(P.pvpRanks(mega.s, Infinity, PVP_MAX_LV)) : "메가진화가 없는 포켓몬입니다" },
   ];
+  // 그림자: 공격 ×1.2, 방어 ×0.833 — 모든 개체에 같은 비율이라 스탯곱 순위는 일반과 같고 실제 공·방만 다름
+  const shadowTable = (rows) => rows.length
+    ? "```\n순위 개체      레벨  CP   공격  방어\n" + rows.map((x) => {
+      const m = P.cpmAt(x.lv);
+      const atk = (base.s[0] + x.iv[0]) * m * SHADOW_ATK, def = (base.s[1] + x.iv[1]) * m * SHADOW_DEF;
+      return `${String(x.rank).padStart(2)}  ${x.iv.map((v) => String(v).padStart(2)).join("/")}  ${String(x.lv).padStart(4)} ${String(x.cp).padStart(5)} ${atk.toFixed(1).padStart(5)} ${def.toFixed(1).padStart(5)}`;
+    }).join("\n") + "\n```"
+    : "참가 불가 (최저 CP가 상한을 넘습니다)";
+  const shadowFields = [
+    { name: "🔵 슈퍼리그 (CP 1500)", value: shadowTable(P.pvpRanks(base.s, 1500, PVP_MAX_LV)) },
+    { name: "🟡 하이퍼리그 (CP 2500)", value: shadowTable(P.pvpRanks(base.s, 2500, PVP_MAX_LV)) },
+    { name: "🟣 마스터리그 (CP 제한 없음)", value: shadowTable(P.pvpRanks(base.s, Infinity, PVP_MAX_LV)) },
+  ];
   return {
     embeds: [{
       title: title(id, sp, f) + " · 배틀 개체 순위",
@@ -162,6 +176,13 @@ function battleEmbed(query, form) {
       thumbnail: { url: ART(id) },
       fields,
       footer: { text: "개체 표기: 공격/방어/체력" },
+    }, {
+      title: `🟪 그림자 ${sp.ko}${sp.forms.length > 1 ? ` [${P.formLabel(base.f, id)}]` : ""} · 배틀 개체 순위`,
+      description: "그림자는 공격 ×1.2 · 방어 ×0.83 (CP는 같음). 모든 개체에 같은 비율이라 **순위는 일반과 같고**, " +
+        "공격·방어는 그림자 기준 실제 수치입니다. 그림자는 메가진화를 할 수 없어 메가마스터리그는 없습니다.",
+      color: 0x6b3fa0,
+      fields: shadowFields,
+      footer: { text: "그림자 출시 여부는 게임에서 확인해 주세요" },
     }],
   };
 }

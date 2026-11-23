@@ -39,6 +39,12 @@ assert.strictEqual(P.parseDexNumber("배틀111"), null);
   }
   const e = require("./embeds").battleEmbed("6").embeds[0];
   assert.strictEqual(e.fields.length, 4);
+  const both = require("./embeds").battleEmbed("111").embeds;
+  assert.strictEqual(both.length, 2);                          // 일반 + 그림자
+  assert.strictEqual(both[1].fields.length, 3);                // 그림자는 메가마스터 없음
+  // 그림자 순위 개체는 일반과 같아야 함
+  const ivs = (f) => f.value.split("\n").filter((l) => /^ ?\d+  /.test(l)).map((l) => l.trim().split(/\s+/)[1]);
+  for (let i = 0; i < 3; i++) assert.deepStrictEqual(ivs(both[1].fields[i]), ivs(both[0].fields[i]));
   assert.ok(e.fields[3].name.includes("메가"));
 }
 
@@ -56,6 +62,9 @@ assert.ok(P.findIVs(P.DEX[6].forms[0].s, 2889, 158, 10).some((r) => r.lv === 40 
 
 // Discord 임베드 제한: 필드 값 1024자, 필드 25개, 전체 6000자
 function checkLimits(r) {
+  let msgTotal = 0;
+  for (const e of r.embeds || []) msgTotal += JSON.stringify(e).length;
+  assert.ok(msgTotal <= 6000, "메시지 전체 임베드 6000자 이하");
   for (const e of r.embeds || []) {
     assert.ok((e.fields || []).length <= 25);
     let total = (e.title || "").length + (e.description || "").length;
