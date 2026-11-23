@@ -61,8 +61,10 @@
 암호화 키는 `FRIEND_CODE_SECRET` (없으면 봇 토큰) — 봇 토큰을 바꾸면 기존 등록은 다시 해야 하므로, 오래 쓸 거면 Railway Variables 에 `FRIEND_CODE_SECRET` 을 아무 긴 문자열로 넣어 두세요.
 
 ### 새 멤버 환영 메시지
-새 멤버가 서버에 들어오면 이름에 `공지` 가 들어간 채널(예: `#공지방`)에 그 멤버를 멘션하며 서버 규칙과 봇 사용법 안내를 올립니다.
-- 문구는 `bot/welcome.js` 에서 바꿀 수 있습니다. 채널은 `NOTICE_CHANNELS` 로 변경.
+새 멤버가 서버에 들어오면:
+- 이름에 `공지` 가 들어간 채널(예: `#공지방`)에 그 멤버를 멘션하며 서버 규칙과 봇 사용법 안내 (`NOTICE_CHANNELS`)
+- 이름에 `메인정보방` 이 들어간 채널에 "어서오세요~ 공지방가서 공지한번만 읽어주세요~ 봇사용법 나와있습니다~" (`GREET_CHANNELS`)
+- 문구는 `bot/welcome.js` 에서 바꿀 수 있습니다.
 - **필수:** Developer Portal → Bot → Privileged Gateway Intents → **SERVER MEMBERS INTENT** 켜기. 꺼져 있으면 환영 메시지만 빠지고 나머지 기능은 그대로 동작합니다 (로그에 안내).
 
 ### 속성 아이콘
