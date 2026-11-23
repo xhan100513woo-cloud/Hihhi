@@ -154,6 +154,18 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "111", cfg).kind, "dex");   // 개체정보방은 그대로
 }
 
+// 새 멤버 환영 메시지
+{
+  const W = require("./welcome");
+  const m = W.welcomeMessage({ id: "42" });
+  assert.ok(m.content.startsWith("<@42> 안녕하세요~ 공지 지켜가며 활동해주세요~"));
+  assert.ok(m.content.includes("3. 거ㄹㅐ는 불가능 합니다.") && m.content.includes("친코등록 : 친코등록 12자리코드"));
+  assert.ok(m.content.endsWith("도감번호-2하면 폼체인지 모습이 나옵니다"));
+  assert.ok(m.content.length <= 2000, "디스코드 메시지 2000자 제한");
+  assert.deepStrictEqual(m.allowedMentions.users, ["42"]);
+  assert.ok(P.channelMatches({ name: "📢공지방", id: "1" }, ["공지"]));
+}
+
 // 친구 코드
 {
   const FC = require("./friendcode");

@@ -25,6 +25,8 @@ const SCHEDULE_CHANNELS = channelList(process.env.SCHEDULE_CHANNELS, "포켓몬�
 const SCH = require("./schedule");
 const FRIEND_CHANNELS = channelList(process.env.FRIEND_CHANNELS, "친코등록");      // 친코등록 / 친코확인
 const FC = require("./friendcode");
+const NOTICE_CHANNELS = channelList(process.env.NOTICE_CHANNELS, "공지");           // 새 멤버 환영 메시지
+const { welcomeMessage } = require("./welcome");
 const { routeMessage } = require("./router");
 const BR = require("./battle-request");
 
@@ -37,6 +39,7 @@ console.log("⚙️ 설정 확인:",
   `ACQ_CHANNELS=${ACQ_CHANNELS.join(",")}`,
   `SCHEDULE_CHANNELS=${SCHEDULE_CHANNELS.join(",")}`,
   `FRIEND_CHANNELS=${FRIEND_CHANNELS.join(",")}`,
+  `NOTICE_CHANNELS=${NOTICE_CHANNELS.join(",")}`,
   `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN 이 설정되지 않았습니다. Railway → Variables 에 DISCORD_TOKEN 을 추가해 주세요.");
@@ -86,6 +89,7 @@ function reportGuild(g) {
     ["🗺️ 획득경로", ACQ_CHANNELS, "ACQ_CHANNELS"],
     ["📅 일정", SCHEDULE_CHANNELS, "SCHEDULE_CHANNELS"],
     ["🤝 친코등록", FRIEND_CHANNELS, "FRIEND_CHANNELS"],
+    ["👋 환영(공지)", NOTICE_CHANNELS, "NOTICE_CHANNELS"],
   ]) {
     const chans = find(list);
     if (chans.size) console.log(`${label} 서버 '${g.name}': ${chans.map((c) => "#" + c.name).join(", ")}`);
@@ -245,19 +249,28 @@ async function setupTypeEmojis(c) {
 }
 
 let client;
-function start(withMessageContent) {
+function start(withMessageContent, withMembers = true) {
   const intents = [GatewayIntentBits.Guilds];
   if (withMessageContent) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+  if (withMembers) intents.push(GatewayIntentBits.GuildMembers);
   client = new Client({ intents });
-  register(client, withMessageContent);
+  register(client, withMessageContent, withMembers);
   client.login(DISCORD_TOKEN).catch((e) => {
+    if (/disallowed intents/i.test(e.message) && withMembers) {
+      console.error("⚠️ SERVER MEMBERS INTENT 가 꺼져 있어 새 멤버 환영 메시지를 보낼 수 없습니다.");
+      console.error("   → discord.com/developers/applications → 앱 선택 → Bot → Privileged Gateway Intents");
+      console.error("     → 'SERVER MEMBERS INTENT' 켜기 → Save Changes → Railway 에서 Restart");
+      console.error("   환영 메시지 없이 다시 접속합니다.");
+      client.destroy().catch(() => {});
+      return start(withMessageContent, false);
+    }
     if (/disallowed intents/i.test(e.message) && withMessageContent) {
       console.error("❌❌ MESSAGE CONTENT INTENT 가 꺼져 있어 채널의 '111', '배틀111' 을 읽을 수 없습니다.");
       console.error("   → discord.com/developers/applications → 앱 선택 → Bot → Privileged Gateway Intents");
       console.error("     → 'MESSAGE CONTENT INTENT' 켜기 → Save Changes → Railway 에서 Restart");
       console.error("   지금은 슬래시 명령어(/도감, /배틀 등)만 동작하는 모드로 다시 접속합니다.");
       client.destroy().catch(() => {});
-      return start(false);
+      return start(false, false);
     }
     if (/invalid token/i.test(e.message))
       console.error("❌ 로그인 실패: 토큰이 올바르지 않습니다. 개발자 포털 → Bot → Reset Token 후 Railway Variables 의 DISCORD_TOKEN 을 새 값으로 바꿔 주세요.");
@@ -266,7 +279,20 @@ function start(withMessageContent) {
   });
 }
 
-function register(client, withMessageContent) {
+function register(client, withMessageContent, withMembers) {
+  // 새 멤버가 들어오면 공지방에 환영 메시지
+  if (withMembers) client.on(Events.GuildMemberAdd, async (member) => {
+    if (member.user.bot) return;
+    const ch = member.guild.channels.cache.find((c) => c.isTextBased && c.isTextBased() && P.channelMatches(c, NOTICE_CHANNELS));
+    if (!ch) return console.error(`⚠️ 서버 '${member.guild.name}': 이름에 '${NOTICE_CHANNELS.join("/")}' 가 들어간 채널이 없어 환영 메시지를 못 보냈습니다.`);
+    try {
+      await ch.send(welcomeMessage(member));
+      console.log(`👋 '${member.guild.name}' 새 멤버 ${member.user.tag} 환영 (#${ch.name})`);
+    } catch (e) {
+      console.error(`❌ 환영 메시지 실패 (#${ch.name}):`, e.message);
+    }
+  });
+
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
@@ -308,7 +334,7 @@ function register(client, withMessageContent) {
     if (GUILD_ID) await c.application.commands.set(commands, GUILD_ID);
     else await c.application.commands.set(commands);
     console.log(`✅ ${c.user.tag} 로그인 완료 · 명령어 ${commands.length}개 등록 (${GUILD_ID ? "서버 " + GUILD_ID : "전역"})`);
-    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")} · 획득경로: ${ACQ_CHANNELS.join(", ")} · 일정: ${SCHEDULE_CHANNELS.join(", ")} · 친코: ${FRIEND_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
+    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")} · 획득경로: ${ACQ_CHANNELS.join(", ")} · 일정: ${SCHEDULE_CHANNELS.join(", ")} · 친코: ${FRIEND_CHANNELS.join(", ")} · 환영: ${withMembers ? NOTICE_CHANNELS.join(", ") : "꺼짐(SERVER MEMBERS INTENT 필요)"}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
     else console.log("⚠️ 슬래시 명령어 전용 모드 (MESSAGE CONTENT INTENT 를 켜면 채널 감지가 동작합니다)");
     for (const g of c.guilds.cache.values()) reportGuild(g);
   });
@@ -358,4 +384,4 @@ function register(client, withMessageContent) {
   });
 }
 
-start(true);
+start(true, true);
