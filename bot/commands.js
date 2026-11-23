@@ -24,4 +24,6 @@ module.exports = [
     .addStringOption(form),
   new SlashCommandBuilder().setName("배틀").setDescription("리그별 배틀 개체 순위 1~10위 (슈퍼·하이퍼·마스터·메가마스터)")
     .addStringOption(pokemon).addStringOption(form),
+  new SlashCommandBuilder().setName("획득").setDescription("포켓몬 GO 획득 경로 (진화·알·둥지·레이드/리서치 전용·지역 한정 등)")
+    .addStringOption(pokemon),
 ].map((c) => c.toJSON());
