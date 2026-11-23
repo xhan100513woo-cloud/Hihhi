@@ -2,7 +2,7 @@
 // 포켓몬 GO 도감 디스코드 봇
 const { Client, Events, GatewayIntentBits, MessageFlags } = require("discord.js");
 const commands = require("./commands");
-const { dexEmbed, cpEmbed, ivEmbed } = require("./embeds");
+const { dexEmbed, cpEmbed, ivEmbed, battleEmbed } = require("./embeds");
 const P = require("./pogo");
 
 try { process.loadEnvFile(require("path").join(__dirname, ".env")); } catch { /* .env 없으면 환경변수 사용 */ }
@@ -26,10 +26,11 @@ client.on(Events.MessageCreate, async (msg) => {
   const ch = msg.channel;
   const watched = DEX_CHANNELS.includes(ch.id) || DEX_CHANNELS.includes(ch.name);
   if (!watched) return;
-  const id = P.parseDexNumber(msg.content);
+  const battleId = P.parseBattle(msg.content);
+  const id = battleId || P.parseDexNumber(msg.content);
   if (!id) return;
   try {
-    const payload = dexEmbed(String(id));
+    const payload = battleId ? battleEmbed(String(id)) : dexEmbed(String(id));
     if (WEBHOOK && (!WEBHOOK_CHANNEL || WEBHOOK_CHANNEL === ch.id)) {
       // 웹훅으로 전송 (웹훅 이름·프로필로 표시됨)
       const res = await fetch(WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" },
@@ -70,6 +71,7 @@ client.on(Events.InteractionCreate, async (it) => {
     if (it.commandName === "도감") reply = dexEmbed(q, form);
     else if (it.commandName === "cp")
       reply = cpEmbed(q, o.getInteger("공격"), o.getInteger("방어"), o.getInteger("체력"), o.getNumber("레벨") ?? 40, form);
+    else if (it.commandName === "배틀") reply = battleEmbed(q, form);
     else if (it.commandName === "개체")
       reply = ivEmbed(q, o.getInteger("cp"), o.getInteger("hp"), o.getInteger("최소개체") ?? 0, form);
     else return;

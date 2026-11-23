@@ -22,4 +22,6 @@ module.exports = [
       { name: "0 (야생)", value: 0 }, { name: "1 (친구 교환)", value: 1 }, { name: "4 (날씨 부스트)", value: 4 },
       { name: "10 (레이드·알·연구)", value: 10 }, { name: "12 (최고의 친구 교환)", value: 12 }))
     .addStringOption(form),
+  new SlashCommandBuilder().setName("배틀").setDescription("리그별 배틀 개체 순위 1~10위 (슈퍼·하이퍼·마스터·메가마스터)")
+    .addStringOption(pokemon).addStringOption(form),
 ].map((c) => c.toJSON());
