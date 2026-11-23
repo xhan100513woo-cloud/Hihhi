@@ -164,6 +164,9 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.ok(m.content.length <= 2000, "디스코드 메시지 2000자 제한");
   assert.deepStrictEqual(m.allowedMentions.users, ["42"]);
   assert.ok(P.channelMatches({ name: "📢공지방", id: "1" }, ["공지"]));
+  const g = W.greetMessage({ id: "42" });
+  assert.strictEqual(g.content, "<@42> 어서오세요~ 공지방가서 공지한번만 읽어주세요~ 봇사용법 나와있습니다~");
+  assert.deepStrictEqual(g.allowedMentions.users, ["42"]);
 }
 
 // 친구 코드

@@ -1,5 +1,5 @@
 "use strict";
-// 새 멤버 환영 메시지 (공지방에 멘션과 함께 올림)
+// 새 멤버 환영 메시지: 공지방에는 규칙·봇 사용법 전체, 메인정보방에는 짧은 인사
 
 const WELCOME_TEXT = `안녕하세요~ 공지 지켜가며 활동해주세요~
 
@@ -34,4 +34,11 @@ function welcomeMessage(member) {
   return { content: `<@${member.id}> ${WELCOME_TEXT}`, allowedMentions: { users: [member.id] } };
 }
 
-module.exports = { WELCOME_TEXT, welcomeMessage };
+const GREET_TEXT = "어서오세요~ 공지방가서 공지한번만 읽어주세요~ 봇사용법 나와있습니다~";
+
+/** 메인정보방 짧은 인사 (그 멤버만 멘션 알림) */
+function greetMessage(member) {
+  return { content: `<@${member.id}> ${GREET_TEXT}`, allowedMentions: { users: [member.id] } };
+}
+
+module.exports = { WELCOME_TEXT, welcomeMessage, GREET_TEXT, greetMessage };
