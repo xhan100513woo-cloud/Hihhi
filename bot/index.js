@@ -48,6 +48,14 @@ async function send(msg, payload) {
   await msg.reply({ ...payload, allowedMentions: { repliedUser: false } });
 }
 
+/** 서버별로 감지하는 채널을 로그에 남긴다 (없으면 경고) */
+function reportGuild(g) {
+  const chans = g.channels.cache.filter((c) => c.isTextBased && c.isTextBased() && P.channelMatches(c, DEX_CHANNELS));
+  if (chans.size) console.log(`🏠 서버 '${g.name}': 감지 채널 ${chans.map((c) => "#" + c.name).join(", ")}`);
+  else console.error(`⚠️ 서버 '${g.name}': 이름에 '${DEX_CHANNELS.join("/")}' 가 들어간 채널이 없어 숫자 입력에 반응하지 않습니다. ` +
+    "(채널 이름을 바꾸거나 Railway Variables 의 DEX_CHANNELS 에 채널 이름을 추가하세요. 슬래시 명령어는 어디서나 동작)");
+}
+
 let client;
 function start(withMessageContent) {
   const intents = [GatewayIntentBits.Guilds];
@@ -74,8 +82,7 @@ function register(client, withMessageContent) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
-    const watched = DEX_CHANNELS.includes(ch.id) || DEX_CHANNELS.includes(ch.name);
-    if (!watched) return;
+    if (!P.channelMatches(ch, DEX_CHANNELS)) return;
     const battle = P.parseBattle(msg.content);
     const q = battle || P.parseDexQuery(msg.content);
     if (!q) return;
@@ -85,7 +92,10 @@ function register(client, withMessageContent) {
         : battle ? battleEmbed(String(q.id), form) : dexEmbed(String(q.id), form);
       await send(msg, payload);
     } catch (e) {
-      console.error("채널 응답 실패:", e.message);
+      if (e.code === 50013 || e.code === 50001 || /Missing (Permissions|Access)/i.test(e.message))
+        console.error(`❌ 권한 부족: 서버 '${msg.guild.name}' 의 #${ch.name} 에서 답장할 수 없습니다. ` +
+          "서버 설정 → 역할(또는 채널 권한)에서 봇에게 '채널 보기 · 메시지 보내기 · 링크 첨부 · 메시지 기록 보기' 를 허용해 주세요.");
+      else console.error("채널 응답 실패:", e.message);
     }
   });
 
@@ -96,7 +106,10 @@ function register(client, withMessageContent) {
     console.log(`✅ ${c.user.tag} 로그인 완료 · 명령어 ${commands.length}개 등록 (${GUILD_ID ? "서버 " + GUILD_ID : "전역"})`);
     if (withMessageContent) console.log(`👀 도감번호 감지 채널: ${DEX_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
     else console.log("⚠️ 슬래시 명령어 전용 모드 (MESSAGE CONTENT INTENT 를 켜면 채널 감지가 동작합니다)");
+    for (const g of c.guilds.cache.values()) reportGuild(g);
   });
+
+  client.on(Events.GuildCreate, (g) => { console.log(`➕ 새 서버에 추가됨: ${g.name}`); reportGuild(g); });
 
   client.on(Events.InteractionCreate, async (it) => {
     try {

@@ -223,7 +223,16 @@ function pvpRanks(S, cap = Infinity, maxLv = 50, top = 10) {
   return res.slice(0, top).map((r, i) => ({ ...r, rank: i + 1, pct: r.sp / best * 100 }));
 }
 
-module.exports = { parseDexQuery, parseDexNumber, parseBattle, pvpRanks,
+/**
+ * 채널이 감지 대상인지: 채널 ID가 같거나, 이모지·기호를 뺀 채널 이름에 설정한 이름이 들어 있으면 true.
+ * 예) 설정 "일반" → "일반", "💬｜일반", "일반-채팅" 모두 해당. "*" 이면 모든 채널.
+ */
+const normName = (s) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+function channelMatches(channel, entries) {
+  return entries.some((e) => e === "*" || e === channel.id || (normName(e) && normName(channel.name).includes(normName(e))));
+}
+
+module.exports = { channelMatches, parseDexQuery, parseDexNumber, parseBattle, pvpRanks,
   DEX, CPM, MAX_ID, TYPES, TYPE_COLOR, CHART, effectiveness, formLabel,
   calcCP, calcHP, cpmAt, levels, findId, suggest, pickForm, defenseGroups, bestLeagueLevel, findIVs,
 };
