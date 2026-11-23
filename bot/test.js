@@ -11,6 +11,17 @@ assert.strictEqual(commands.length, 4);
 for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 150], ["배틀리자몽", 6], ["배틀하자", null], ["배틀", null], ["111배틀", null]])
   assert.strictEqual((P.parseBattle(txt) || {}).id ?? null, want, txt);
 
+// 감지 채널 이름 매칭
+const ch = (name, id = "1") => ({ name, id });
+assert.ok(P.channelMatches(ch("일반"), ["일반"]));
+assert.ok(P.channelMatches(ch("💬｜일반"), ["일반"]));
+assert.ok(P.channelMatches(ch("일반-채팅"), ["일반"]));
+assert.ok(P.channelMatches(ch("general"), ["일반", "General"]));
+assert.ok(P.channelMatches(ch("아무거나", "999"), ["999"]));
+assert.ok(P.channelMatches(ch("아무거나"), ["*"]));
+assert.ok(!P.channelMatches(ch("공지"), ["일반"]));
+assert.ok(!P.channelMatches(ch("공지"), [""]));
+
 // 모습 번호 (-1 기본, -2 부터 변화 모습)
 const q = (t) => JSON.stringify(P.parseBattle(t) || P.parseDexQuery(t));
 assert.strictEqual(q("888-1"), JSON.stringify({ id: 888, form: 1, valid: true }));
