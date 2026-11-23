@@ -10,6 +10,8 @@ try { process.loadEnvFile(require("path").join(__dirname, ".env")); } catch { /*
 /** 붙여 넣을 때 섞이기 쉬운 공백·줄바꿈·따옴표·"Bot " 접두어 제거 */
 const clean = (v) => String(v || "").trim().replace(/^["'`]+|["'`]+$/g, "").replace(/^Bot\s+/i, "").trim();
 const DISCORD_TOKEN = clean(process.env.DISCORD_TOKEN);
+// 친구 코드 암호화 키 (없으면 봇 토큰 사용 → 토큰을 바꾸면 기존 등록은 다시 해야 함)
+const FRIEND_SECRET = clean(process.env.FRIEND_CODE_SECRET) || DISCORD_TOKEN;
 const GUILD_ID = clean(process.env.GUILD_ID);
 // 도감번호를 감지할 채널 (쉼표로 여러 개). 채널 ID 또는 이름 모두 가능
 const channelList = (v, def) => (v || def).split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
@@ -21,6 +23,8 @@ const ACQ_CHANNELS = channelList(process.env.ACQ_CHANNELS, "포켓몬획득정�
 const { acquireEmbed } = require("./acquire");
 const SCHEDULE_CHANNELS = channelList(process.env.SCHEDULE_CHANNELS, "포켓몬고일정"); // 현재일정 / 다음일정
 const SCH = require("./schedule");
+const FRIEND_CHANNELS = channelList(process.env.FRIEND_CHANNELS, "친코등록");      // 친코등록 / 친코확인
+const FC = require("./friendcode");
 const { routeMessage } = require("./router");
 const BR = require("./battle-request");
 
@@ -32,6 +36,7 @@ console.log("⚙️ 설정 확인:",
   `PVP_CHANNELS=${PVP_CHANNELS.join(",")}`,
   `ACQ_CHANNELS=${ACQ_CHANNELS.join(",")}`,
   `SCHEDULE_CHANNELS=${SCHEDULE_CHANNELS.join(",")}`,
+  `FRIEND_CHANNELS=${FRIEND_CHANNELS.join(",")}`,
   `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN 이 설정되지 않았습니다. Railway → Variables 에 DISCORD_TOKEN 을 추가해 주세요.");
@@ -80,6 +85,7 @@ function reportGuild(g) {
     ["⚔️ 배틀신청", BATTLE_CHANNELS, "BATTLE_CHANNELS"],
     ["🗺️ 획득경로", ACQ_CHANNELS, "ACQ_CHANNELS"],
     ["📅 일정", SCHEDULE_CHANNELS, "SCHEDULE_CHANNELS"],
+    ["🤝 친코등록", FRIEND_CHANNELS, "FRIEND_CHANNELS"],
   ]) {
     const chans = find(list);
     if (chans.size) console.log(`${label} 서버 '${g.name}': ${chans.map((c) => "#" + c.name).join(", ")}`);
@@ -107,16 +113,73 @@ async function resolveMember(msg, query, authorId) {
 }
 
 /** 채널의 최근 메시지(최대 500개)에서 신청/수락 기록 읽기 */
-async function loadRequests(channel) {
+/** 채널의 최근 메시지(최대 500개)를 { authorId, content, time, buttonIds } 로 읽기 */
+async function fetchHistory(channel) {
   const msgs = [];
   let before;
   for (let i = 0; i < 5; i++) {
     const page = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
-    for (const m of page.values()) msgs.push({ authorId: m.author.id, content: m.content, time: m.createdTimestamp });
+    for (const m of page.values()) {
+      const buttonIds = [];
+      for (const row of m.components || []) for (const c of row.components || []) if (c.customId) buttonIds.push(c.customId);
+      msgs.push({ authorId: m.author.id, content: m.content, time: m.createdTimestamp, buttonIds });
+    }
     if (page.size < 100) break;
     before = page.last().id;
   }
-  return BR.buildRequests(msgs, channel.client.user.id);
+  return msgs;
+}
+
+async function loadRequests(channel) {
+  return BR.buildRequests(await fetchHistory(channel), channel.client.user.id);
+}
+
+/** 채널 기록에서 등록된 친구 코드 찾기 (없거나 복호화 실패면 null) */
+async function loadFriendCode(channel, userId) {
+  const enc = FC.findRegistration(await fetchHistory(channel), channel.client.user.id, userId);
+  return enc ? FC.decrypt(enc, FRIEND_SECRET) : null;
+}
+
+/** 친코등록 / 친코확인 */
+async function handleFriendCommand(msg, cmd) {
+  const author = { id: msg.author.id, displayName: msg.member?.displayName || msg.author.username };
+  if (cmd.type === "register") {
+    if (!cmd.code) return msg.reply(FC.invalidCodeMessage());
+    const enc = FC.encrypt(cmd.code, FRIEND_SECRET);
+    let deleted = false;
+    try { await msg.delete(); deleted = true; }
+    catch { console.error(`⚠️ #${msg.channel.name}: 코드가 담긴 메시지를 지우지 못했습니다 (봇에 '메시지 관리' 권한 필요)`); }
+    return msg.channel.send(FC.registerMessage(author, enc, deleted));
+  }
+  // 친코확인 닉네임
+  const quiet = { parse: [], repliedUser: false };
+  if (!cmd.query) return msg.reply({ content: "누구의 친구 코드를 볼까요? 예) `친코확인 홍길동` 또는 `친코확인 @홍길동`", allowedMentions: quiet });
+  const r = await resolveMember(msg, cmd.query, author.id);
+  if (!r.member) {
+    const text = r.error === "self" ? "😅 내 친구 코드는 요청할 수 없어요."
+      : r.error === "bot" ? "🤖 봇은 친구 코드가 없어요."
+      : BR.requestMessage(r, cmd.query, author).content;
+    return msg.reply({ content: text, allowedMentions: quiet });
+  }
+  const code = await loadFriendCode(msg.channel, r.member.id);
+  if (!code) return msg.reply({ content: `❌ **${r.member.displayName}** 님은 아직 친코등록을 하지 않았어요.`, allowedMentions: quiet });
+  return msg.reply(FC.requestMessage(r.member, author));
+}
+
+/** 친코 버튼: 등록한 본인만 누를 수 있음 */
+async function handleFriendButton(it, b) {
+  if (it.user.id !== b.owner) {
+    return it.reply({ content: "🙅 친구 코드를 등록한 본인만 누를 수 있어요.", flags: MessageFlags.Ephemeral });
+  }
+  const owner = { id: it.user.id, displayName: it.member?.displayName || it.user.username };
+  if (b.action === "delete") {
+    await it.message.delete().catch(() => {});
+    return it.reply({ content: "🗑️ 친코 등록을 삭제했어요.", flags: MessageFlags.Ephemeral });
+  }
+  if (b.action === "reject") return it.update(FC.rejectedMessage(owner, b.requester));
+  const code = await loadFriendCode(it.channel, owner.id);
+  if (!code) return it.update({ content: "⚠️ 등록된 친구 코드를 찾을 수 없어요. `친코등록` 으로 다시 등록해 주세요.", components: [] });
+  return it.update(FC.acceptedMessage(owner, b.requester, code));
 }
 
 /** 배틀신청 / 배틀신청 확인 / 배틀신청 수락 */
@@ -207,11 +270,16 @@ function register(client, withMessageContent) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
-    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS });
+    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS, friend: FRIEND_CHANNELS });
     if (!route) return;
     if (route.kind === "battleCmd") {
       try { await handleBattleCommand(msg, route.cmd); }
       catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
+      return;
+    }
+    if (route.kind === "friend") {
+      try { await handleFriendCommand(msg, route.cmd); }
+      catch (e) { console.error(`❌ 친코 응답 실패 (#${ch.name}):`, e.message); }
       return;
     }
     if (route.kind === "schedule") {
@@ -240,7 +308,7 @@ function register(client, withMessageContent) {
     if (GUILD_ID) await c.application.commands.set(commands, GUILD_ID);
     else await c.application.commands.set(commands);
     console.log(`✅ ${c.user.tag} 로그인 완료 · 명령어 ${commands.length}개 등록 (${GUILD_ID ? "서버 " + GUILD_ID : "전역"})`);
-    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")} · 획득경로: ${ACQ_CHANNELS.join(", ")} · 일정: ${SCHEDULE_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
+    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")} · 획득경로: ${ACQ_CHANNELS.join(", ")} · 일정: ${SCHEDULE_CHANNELS.join(", ")} · 친코: ${FRIEND_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
     else console.log("⚠️ 슬래시 명령어 전용 모드 (MESSAGE CONTENT INTENT 를 켜면 채널 감지가 동작합니다)");
     for (const g of c.guilds.cache.values()) reportGuild(g);
   });
@@ -258,6 +326,11 @@ function register(client, withMessageContent) {
           return it.respond(forms.slice(0, 25).map((f, i) => ({ name: `${id}-${i + 1} · ${P.formLabel(f.f, id)}`.slice(0, 100), value: String(i + 1) })));
         }
         return it.respond([]);
+      }
+      if (it.isButton()) {
+        const b = FC.parseButtonId(it.customId);
+        if (b) return await handleFriendButton(it, b);
+        return;
       }
       if (!it.isChatInputCommand()) return;
 

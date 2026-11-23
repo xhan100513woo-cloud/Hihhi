@@ -154,6 +154,57 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "111", cfg).kind, "dex");   // 개체정보방은 그대로
 }
 
+// 친구 코드
+{
+  const FC = require("./friendcode");
+  assert.deepStrictEqual(FC.parseFriendCommand("친코등록 1234 5678 9012"), { type: "register", code: "123456789012" });
+  assert.deepStrictEqual(FC.parseFriendCommand("친코 등록 1234-5678-9012"), { type: "register", code: "123456789012" });
+  assert.deepStrictEqual(FC.parseFriendCommand("친코등록 1234"), { type: "register", code: null });
+  assert.deepStrictEqual(FC.parseFriendCommand("친코등록"), { type: "register", code: null });
+  assert.deepStrictEqual(FC.parseFriendCommand("친코확인 홍길동"), { type: "check", query: "홍길동" });
+  assert.deepStrictEqual(FC.parseFriendCommand("친코확인"), { type: "check", query: null });
+  assert.strictEqual(FC.parseFriendCommand("안녕"), null);
+  assert.strictEqual(FC.formatCode("123456789012"), "1234 5678 9012");
+  // 암호화: 같은 키로만 풀리고, 결과에 코드가 그대로 보이지 않음
+  const enc = FC.encrypt("123456789012", "secret-a");
+  assert.strictEqual(FC.decrypt(enc, "secret-a"), "123456789012");
+  assert.strictEqual(FC.decrypt(enc, "secret-b"), null);
+  assert.ok(!enc.includes("123456789012"));
+  // 버튼 ID 100자 제한 (디스코드 사용자 ID 최대 20자리)
+  const owner = { id: "12345678901234567890", displayName: "홍길동" }, req = { id: "98765432109876543210", displayName: "철수" };
+  const reg = FC.registerMessage(owner, enc, true);
+  const delId = reg.components[0].components[0].custom_id;
+  assert.ok(delId.length <= 100, "custom_id " + delId.length);
+  assert.ok(!reg.content.includes("1234"));                                         // 등록 메시지에 코드 노출 없음
+  assert.deepStrictEqual(FC.parseButtonId(delId), { action: "delete", owner: owner.id, enc });
+  // 채널 기록에서 최신 등록 찾기 (봇 메시지만, 가장 최근 것)
+  const BOT = "1";
+  const enc2 = FC.encrypt("999988887777", "secret-a");
+  const hist = [
+    { authorId: BOT, time: 1, buttonIds: [delId] },
+    { authorId: BOT, time: 3, buttonIds: [FC.registerMessage(owner, enc2, true).components[0].components[0].custom_id] },
+    { authorId: "2", time: 5, buttonIds: [`fcdel:${owner.id}:${FC.encrypt("000000000000", "secret-a")}`] },   // 사람이 만든 건 무시
+  ];
+  assert.strictEqual(FC.decrypt(FC.findRegistration(hist, BOT, owner.id), "secret-a"), "999988887777");
+  assert.strictEqual(FC.findRegistration(hist, BOT, req.id), null);
+  // 요청 → 수락 (등록자만 알림 → 수락 후 요청자에게 코드)
+  const rq = FC.requestMessage(owner, req);
+  assert.ok(rq.content.includes("수락하시겠습니까?") && rq.content.startsWith(`<@${owner.id}>`));
+  assert.deepStrictEqual(rq.allowedMentions.users, [owner.id]);
+  const [acc, rej] = rq.components[0].components.map((c) => FC.parseButtonId(c.custom_id));
+  assert.deepStrictEqual(acc, { action: "accept", owner: owner.id, requester: req.id });
+  assert.strictEqual(rej.action, "reject");
+  const done = FC.acceptedMessage(owner, req.id, "999988887777");
+  assert.ok(done.content.includes("친코 : 9999 8888 7777") && done.components.length === 0);
+  assert.deepStrictEqual(done.allowedMentions.users, [req.id]);
+  // 채널 라우팅
+  const { routeMessage } = require("./router");
+  const cfg = { dex: ["포켓몬개체정보방"], pvp: [], battle: [], friend: ["친코등록"] };
+  assert.strictEqual(routeMessage({ name: "친코등록", id: "1" }, "친코등록 123456789012", cfg).kind, "friend");
+  assert.strictEqual(routeMessage({ name: "친코등록방", id: "1" }, "친코확인 홍길동", cfg).kind, "friend");
+  assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "친코등록 123456789012", cfg), null);
+}
+
 // 포켓몬 GO 일정
 (async () => {
   const S = require("./schedule");
