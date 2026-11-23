@@ -17,6 +17,8 @@ const channelList = (v, def) => (v || def).split(",").map((s) => s.trim().replac
 const DEX_CHANNELS = channelList(process.env.DEX_CHANNELS, "포켓몬개체정보방");   // 111, 888-2
 const PVP_CHANNELS = channelList(process.env.PVP_CHANNELS, "배틀개체정보방");     // 배틀111
 const BATTLE_CHANNELS = channelList(process.env.BATTLE_CHANNELS, "배틀신청");     // 배틀신청 닉네임
+const ACQ_CHANNELS = channelList(process.env.ACQ_CHANNELS, "포켓몬획득정보");     // 111, 리자몽 → 획득 경로
+const { acquireEmbed } = require("./acquire");
 const { routeMessage } = require("./router");
 const BR = require("./battle-request");
 
@@ -26,6 +28,7 @@ console.log("⚙️ 설정 확인:",
   `GUILD_ID=${GUILD_ID || "없음"}`,
   `DEX_CHANNELS=${DEX_CHANNELS.join(",")}`,
   `PVP_CHANNELS=${PVP_CHANNELS.join(",")}`,
+  `ACQ_CHANNELS=${ACQ_CHANNELS.join(",")}`,
   `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN 이 설정되지 않았습니다. Railway → Variables 에 DISCORD_TOKEN 을 추가해 주세요.");
@@ -63,6 +66,7 @@ function reportGuild(g) {
     ["📖 도감번호", DEX_CHANNELS, "DEX_CHANNELS"],
     ["🏆 배틀개체", PVP_CHANNELS, "PVP_CHANNELS"],
     ["⚔️ 배틀신청", BATTLE_CHANNELS, "BATTLE_CHANNELS"],
+    ["🗺️ 획득경로", ACQ_CHANNELS, "ACQ_CHANNELS"],
   ]) {
     const chans = find(list);
     if (chans.size) console.log(`${label} 서버 '${g.name}': ${chans.map((c) => "#" + c.name).join(", ")}`);
@@ -190,7 +194,7 @@ function register(client, withMessageContent) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
-    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS });
+    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS });
     if (!route) return;
     if (route.kind === "battleCmd") {
       try { await handleBattleCommand(msg, route.cmd); }
@@ -200,7 +204,8 @@ function register(client, withMessageContent) {
     const q = route.q, battle = route.kind === "pvp";
     try {
       const form = q.form ? String(q.form) : undefined;
-      const { ephemeral, ...payload } = !q.valid ? badForm(q.id)
+      const { ephemeral, ...payload } = route.kind === "acq" ? acquireEmbed(q.id)
+        : !q.valid ? badForm(q.id)
         : battle ? battleEmbed(String(q.id), form) : dexEmbed(String(q.id), form);
       await send(msg, payload);
     } catch (e) {
@@ -217,7 +222,7 @@ function register(client, withMessageContent) {
     if (GUILD_ID) await c.application.commands.set(commands, GUILD_ID);
     else await c.application.commands.set(commands);
     console.log(`✅ ${c.user.tag} 로그인 완료 · 명령어 ${commands.length}개 등록 (${GUILD_ID ? "서버 " + GUILD_ID : "전역"})`);
-    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
+    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")} · 획득경로: ${ACQ_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
     else console.log("⚠️ 슬래시 명령어 전용 모드 (MESSAGE CONTENT INTENT 를 켜면 채널 감지가 동작합니다)");
     for (const g of c.guilds.cache.values()) reportGuild(g);
   });
@@ -244,6 +249,10 @@ function register(client, withMessageContent) {
       else if (it.commandName === "cp")
         reply = cpEmbed(q, o.getInteger("공격"), o.getInteger("방어"), o.getInteger("체력"), o.getNumber("레벨") ?? 40, form);
       else if (it.commandName === "배틀") reply = battleEmbed(q, form);
+    else if (it.commandName === "획득") {
+      const id = P.findId(q);
+      reply = id ? acquireEmbed(id) : { content: `❌ \`${q}\` 에 해당하는 포켓몬을 찾을 수 없습니다.`, ephemeral: true };
+    }
       else if (it.commandName === "개체")
         reply = ivEmbed(q, o.getInteger("cp"), o.getInteger("hp"), o.getInteger("최소개체") ?? 0, form);
       else return;

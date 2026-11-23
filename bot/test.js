@@ -5,7 +5,7 @@ const commands = require("./commands");
 const { dexEmbed, cpEmbed, ivEmbed } = require("./embeds");
 const P = require("./pogo");
 
-assert.strictEqual(commands.length, 4);
+assert.strictEqual(commands.length, 5);
 
 // 배틀 개체 순위
 for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 150], ["배틀리자몽", 6], ["배틀하자", null], ["배틀", null], ["111배틀", null]])
@@ -130,6 +130,30 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(routeMessage({ name: "아무거나", id: "1" }, "111", { dex: ["*"], pvp: [], battle: [] }).kind, "dex");
 }
 
+// 획득 경로
+{
+  const A = require("./acquire");
+  const lines = (id) => A.acquireLines(id).join("\n");
+  assert.ok(lines(172).includes("알 부화") && !lines(172).includes("야생 출현"));     // 피츄: 베이비
+  assert.ok(lines(150).includes("전설") && lines(150).includes("레이드 전용"));     // 뮤츠
+  assert.ok(lines(151).includes("환상") && lines(151).includes("리서치 전용"));     // 뮤
+  assert.ok(lines(132).includes("변장") && !lines(132).includes("야생 출현"));      // 메타몽
+  assert.ok(lines(1).includes("야생 출현") && lines(1).includes("맑음"));           // 이상해씨 + 날씨
+  assert.ok(lines(83).includes("지역 한정"));                                       // 파오리
+  assert.ok(!lines(25).includes("드물"));                                            // 피카츄: 베이비에서 진화 → 흔함
+  assert.ok(lines(887).includes("드물"));                                            // 드래펄트: 진화형
+  assert.strictEqual(A.condText({ candy: 25, lure: "Mossy Lure Module" }), "사탕 25개 · 이끼 루어");
+  assert.strictEqual(A.condText({ candy: 25, buddyKm: 10, day: true }), "사탕 25개 · 파트너로 10km 걷기 · 낮에만");
+  const evo = A.acquireEmbed(133).embeds[0].fields.find((f) => f.name.includes("다음 진화")).value;
+  assert.ok(evo.includes("리피아") && evo.includes("이끼 루어") && evo.includes("블래키") && evo.includes("밤에만"));
+  const { routeMessage } = require("./router");
+  const cfg = { dex: ["포켓몬개체정보방"], pvp: ["배틀개체정보방"], battle: ["배틀신청"], acq: ["포켓몬획득정보"] };
+  assert.strictEqual(routeMessage({ name: "포켓몬획득정보방", id: "1" }, "111", cfg).kind, "acq");
+  assert.strictEqual(routeMessage({ name: "포켓몬획득정보방", id: "1" }, "리자몽", cfg).kind, "acq");
+  assert.strictEqual(routeMessage({ name: "포켓몬획득정보방", id: "1" }, "배틀111", cfg), null);
+  assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "111", cfg).kind, "dex");   // 개체정보방은 그대로
+}
+
 // 이름만으로 조회
 assert.deepStrictEqual(P.parseNameQuery("리자몽"), { id: 6, form: null, valid: true });
 assert.deepStrictEqual(P.parseNameQuery(" Charizard "), { id: 6, form: null, valid: true });
@@ -222,6 +246,7 @@ for (const id of Object.keys(P.DEX)) {
 checkLimits(ivEmbed("6", 2889, null, 0));
 const { battleEmbed } = require("./embeds");
 for (const id of ["1", "6", "111", "150", "184", "376", "384", "1025"]) checkLimits(battleEmbed(id));
+for (const id of Object.keys(P.DEX)) checkLimits(require("./acquire").acquireEmbed(+id));      // 모든 포켓몬 획득 경로
 assert.ok(dexEmbed("없는포켓몬").ephemeral);
 
 console.log(JSON.stringify(dexEmbed("리자몽").embeds[0], null, 1).slice(0, 1500));
