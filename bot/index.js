@@ -63,8 +63,8 @@ function reportGuild(g) {
 }
 
 /** "배틀신청 닉네임" 처리: 멘션이 있으면 그 사람, 없으면 서버 멤버 검색 */
-async function handleBattleRequest(msg, query) {
-  const author = { id: msg.author.id, displayName: msg.member?.displayName || msg.author.username };
+/** 닉네임(또는 메시지의 멘션)으로 서버 멤버 찾기 → pickMember 결과 */
+async function resolveMember(msg, query, authorId) {
   let members = [];
   const mentioned = msg.mentions.members?.first();
   if (mentioned) members = [mentioned];
@@ -77,8 +77,45 @@ async function handleBattleRequest(msg, query) {
     }
   }
   const list = members.map((m) => ({ id: m.id, displayName: m.displayName, username: m.user.username, bot: m.user.bot }));
-  const result = mentioned ? BR.pickMember(list, list[0].displayName, author.id) : BR.pickMember(list, query, author.id);
-  await msg.reply(BR.requestMessage(result, query, author));
+  return mentioned ? BR.pickMember(list, list[0].displayName, authorId) : BR.pickMember(list, query, authorId);
+}
+
+/** 채널의 최근 메시지(최대 500개)에서 신청/수락 기록 읽기 */
+async function loadRequests(channel) {
+  const msgs = [];
+  let before;
+  for (let i = 0; i < 5; i++) {
+    const page = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    for (const m of page.values()) msgs.push({ authorId: m.author.id, content: m.content, time: m.createdTimestamp });
+    if (page.size < 100) break;
+    before = page.last().id;
+  }
+  return BR.buildRequests(msgs, channel.client.user.id);
+}
+
+/** 배틀신청 / 배틀신청 확인 / 배틀신청 수락 */
+async function handleBattleCommand(msg, cmd) {
+  const author = { id: msg.author.id, displayName: msg.member?.displayName || msg.author.username };
+  if (cmd.type === "request") {
+    const result = await resolveMember(msg, cmd.query, author.id);
+    return msg.reply(BR.requestMessage(result, cmd.query, author));
+  }
+  const requests = await loadRequests(msg.channel);
+  if (cmd.type === "check") return msg.reply(BR.checkMessage(requests, author.id));
+  // 수락
+  let challengerId = null;
+  if (cmd.query) {
+    const r = await resolveMember(msg, cmd.query, null);
+    if (!r.member) return msg.reply(BR.requestMessage(r, cmd.query, author));
+    challengerId = r.member.id;
+  }
+  const pending = BR.findPending(requests, author.id, challengerId);
+  if (!pending) {
+    return msg.reply({ content: cmd.query
+      ? `❌ '${cmd.query}' 님에게 받은 대기 중인 배틀신청이 없어요. \`배틀신청 확인\` 으로 목록을 볼 수 있어요.`
+      : "❌ 받은 대기 중인 배틀신청이 없어요.", allowedMentions: { parse: [], repliedUser: false } });
+  }
+  return msg.reply(BR.acceptMessage(pending, author));
 }
 
 /**
@@ -136,9 +173,9 @@ function register(client, withMessageContent) {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
     if (P.channelMatches(ch, BATTLE_CHANNELS)) {
-      const query = BR.parseBattleRequest(msg.content);
-      if (query) {
-        try { await handleBattleRequest(msg, query); }
+      const cmd = BR.parseBattleCommand(msg.content);
+      if (cmd) {
+        try { await handleBattleCommand(msg, cmd); }
         catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
         return;
       }

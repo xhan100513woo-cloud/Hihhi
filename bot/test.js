@@ -41,9 +41,39 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(BR.pickMember(ms, "영희", "3").error, "notfound");
   assert.strictEqual(BR.pickMember(ms, "철수", "3").error, "self");
   assert.strictEqual(BR.pickMember(ms, "도감봇", "3").error, "bot");
-  const ok = BR.requestMessage(BR.pickMember(ms, "홍길동", "3"), "홍길동", { displayName: "철수" });
+  const ok = BR.requestMessage(BR.pickMember(ms, "홍길동", "3"), "홍길동", { id: "3", displayName: "철수" });
   assert.ok(ok.content.startsWith("<@1>") && ok.content.includes("**홍길동** 님과 배틀신청이 완료되었습니다."));
   assert.deepStrictEqual(ok.allowedMentions.users, ["1"]);
+
+  // 명령 해석
+  assert.deepStrictEqual(BR.parseBattleCommand("배틀신청 확인"), { type: "check" });
+  assert.deepStrictEqual(BR.parseBattleCommand("배틀신청 수락"), { type: "accept", query: null });
+  assert.deepStrictEqual(BR.parseBattleCommand("배틀신청 수락 홍길동"), { type: "accept", query: "홍길동" });
+  assert.deepStrictEqual(BR.parseBattleCommand("배틀신청 홍길동"), { type: "request", query: "홍길동" });
+  assert.strictEqual(BR.parseBattleCommand("배틀111"), null);
+
+  // 왕복: 봇이 보낸 신청 메시지 → 기록 읽기 → 수락 메시지 → 수락 반영
+  const BOT = "9", hist = [];
+  const post = (m, t) => hist.push({ authorId: BOT, content: m.content, time: t });
+  post(ok, 1000);                                                                  // 철수(3) → 홍길동(1)
+  post(BR.requestMessage({ member: ms[2] }, "철수", { id: "2", displayName: "홍길순" }), 2000); // 홍길순(2) → 철수(3)
+  hist.push({ authorId: "3", content: ok.content, time: 1500 });                   // 사람이 같은 글을 써도 무시
+  let reqs = BR.buildRequests(hist, BOT);
+  assert.strictEqual(reqs.length, 2);
+  assert.deepStrictEqual([reqs[0].challenger, reqs[0].target, reqs[0].accepted], ["3", "1", false]);
+  const pend = BR.findPending(reqs, "1", null);
+  assert.ok(pend && pend.challenger === "3");
+  assert.strictEqual(BR.findPending(reqs, "1", "2"), null);                       // 홍길순에게 받은 건 없음
+  const acc = BR.acceptMessage(pend, { id: "1", displayName: "홍길동" });
+  assert.ok(acc.content.startsWith("<@3>") && acc.content.includes("**홍길동** 님이 배틀신청을 수락했습니다!"));
+  assert.deepStrictEqual(acc.allowedMentions.users, ["3"]);                         // 신청자에게만 알림
+  post(acc, 3000);
+  reqs = BR.buildRequests(hist, BOT);
+  assert.strictEqual(reqs[0].accepted, true);
+  assert.strictEqual(BR.findPending(reqs, "1", null), null);
+  const chk = BR.checkMessage(reqs, "3").content;                                  // 철수 입장
+  assert.ok(chk.includes("나 → <@1> 님  ✅ 수락됨") && chk.includes("<@2> 님 → 나  ⏳ 대기 중"));
+  assert.deepStrictEqual(BR.checkMessage(reqs, "3").allowedMentions.parse, []);    // 확인은 아무도 알림 안 감
 }
 
 // 감지 채널 이름 매칭
