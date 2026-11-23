@@ -5,7 +5,7 @@ const commands = require("./commands");
 const { dexEmbed, cpEmbed, ivEmbed } = require("./embeds");
 const P = require("./pogo");
 
-assert.strictEqual(commands.length, 5);
+assert.strictEqual(commands.length, 6);
 
 // 배틀 개체 순위
 for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 150], ["배틀리자몽", 6], ["배틀하자", null], ["배틀", null], ["111배틀", null]])
@@ -153,6 +153,51 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(routeMessage({ name: "포켓몬획득정보방", id: "1" }, "배틀111", cfg), null);
   assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "111", cfg).kind, "dex");   // 개체정보방은 그대로
 }
+
+// 포켓몬 GO 일정
+(async () => {
+  const S = require("./schedule");
+  // 현지 시간(Z 없음)은 한국 시간, Z 는 UTC
+  assert.strictEqual(S.parseTime("2026-11-25T18:00:00.000"), Date.parse("2026-11-25T09:00:00Z"));
+  assert.strictEqual(S.parseTime("2026-11-24T21:00:00.000Z"), Date.parse("2026-11-24T21:00:00Z"));
+  assert.strictEqual(S.parseTime(null), null);
+  assert.strictEqual(S.fmtTime(Date.parse("2026-11-25T09:00:00Z")), "11/25(수) 18:00");
+  assert.strictEqual(S.parseScheduleCommand("현재일정"), "current");
+  assert.strictEqual(S.parseScheduleCommand(" 다음 일정 "), "upcoming");
+  assert.strictEqual(S.parseScheduleCommand("현재일정 알려줘"), null);
+  assert.deepStrictEqual(S.koreanNames("Noibat Spotlight Hour"), ["음뱃"]);
+  const now = Date.parse("2026-11-23T11:00:00Z");      // 한국 11/23 20:00
+  const ev = [
+    { name: "Ended", eventType: "event", start: "2026-11-20T10:00:00.000", end: "2026-11-22T20:00:00.000" },
+    { name: "Dynamax Espurr during Max Monday", eventType: "max-mondays", start: "2026-11-23T06:00:00.000", end: "2026-11-23T21:00:00.000", link: "https://x" },
+    { name: "Long Season", eventType: "season", start: "2026-09-08T10:00:00.000", end: "2026-12-01T10:00:00.000" },
+    { name: "Noibat Spotlight Hour", eventType: "pokemon-spotlight-hour", start: "2026-11-26T18:00:00.000", end: "2026-11-26T19:00:00.000" },
+    { name: "GBL", eventType: "go-battle-league", start: "2026-11-24T21:00:00.000Z", end: "2026-12-01T21:00:00.000Z" },
+    { name: "No date", eventType: "max-battles", start: null, end: null },
+  ];
+  const { current, upcoming } = S.classify(ev, now);
+  assert.deepStrictEqual(current.map((x) => x.name), ["Dynamax Espurr during Max Monday", "Long Season"]);   // 곧 끝나는 순
+  assert.deepStrictEqual(upcoming.map((x) => x.name), ["GBL", "Noibat Spotlight Hour"]);                   // 가까운 순
+  const cur = S.scheduleEmbed(ev, now, "current").embeds[0];
+  assert.ok(cur.fields[0].name.includes("[맥스 먼데이]") && cur.fields[0].value.includes("냐스퍼") && cur.fields[0].value.includes("1시간 0분 남음"));
+  const up = S.scheduleEmbed(ev, now, "upcoming").embeds[0];
+  assert.ok(up.fields[0].value.includes("11/25(수) 06:00"));                                                // UTC → 한국 시간
+  assert.ok(S.scheduleEmbed([], now, "current").embeds[0].description.includes("없어요"));
+  const many = Array.from({ length: 40 }, (_, i) => ({ name: "Event " + i + " " + "x".repeat(200), eventType: "event", start: "2026-12-01T10:00:00.000", end: "2026-12-02T10:00:00.000", link: "https://leekduck.com/" + "y".repeat(100) }));
+  const big = S.scheduleEmbed(many, now, "upcoming").embeds[0];
+  assert.ok(big.fields.length <= 15 && JSON.stringify(big).length <= 6000 && big.description.includes("총 40개"));
+  // 채널 라우팅
+  const { routeMessage } = require("./router");
+  const cfg = { dex: ["포켓몬개체정보방"], pvp: [], battle: [], schedule: ["포켓몬고일정"] };
+  assert.deepStrictEqual(routeMessage({ name: "포켓몬고일정", id: "1" }, "현재일정", cfg), { kind: "schedule", mode: "current" });
+  assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "현재일정", cfg), null);
+  assert.strictEqual(routeMessage({ name: "포켓몬고일정", id: "1" }, "111", cfg), null);
+  // 받기 실패 시 이전 데이터 사용, 처음부터 실패하면 오류
+  await assert.rejects(S.getEvents(async () => { throw new Error("down"); }));
+  const got = await S.getEvents(async () => ({ ok: true, json: async () => ev }));
+  assert.strictEqual(got.length, ev.length);
+  console.log("일정 테스트 통과");
+})().catch((e) => { console.error(e); process.exit(1); });
 
 // 이름만으로 조회
 assert.deepStrictEqual(P.parseNameQuery("리자몽"), { id: 6, form: null, valid: true });
