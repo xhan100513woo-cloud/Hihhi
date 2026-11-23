@@ -188,19 +188,30 @@ function parseDexNumber(content) {
 }
 
 /** "배틀111", "배틀 111", "배틀888-2", "배틀 리자몽", "배틀자시안-2" → { id, form, valid } */
+// 이름 → 도감번호 (한국어 이름은 띄어쓰기 무시, 영어 이름은 대소문자 무시)
+const nameKey = (s) => String(s).toLowerCase().replace(/\s+/g, "");
+const NAME_INDEX = new Map();
+for (const [id, p] of Object.entries(DEX)) {
+  if (p.ko) NAME_INDEX.set(nameKey(p.ko), +id);
+  if (p.en && !NAME_INDEX.has(nameKey(p.en))) NAME_INDEX.set(nameKey(p.en), +id);
+}
+
+/** 포켓몬 이름(+모습 번호)만으로 된 메시지: "리자몽", "charizard", "자시안-2" → { id, form, valid } (정확히 일치할 때만) */
+function parseNameQuery(content) {
+  const nm = String(content).trim().match(/^(.+?)(?:\s*-\s*(\d{1,2}))?$/);
+  if (!nm) return null;
+  const id = NAME_INDEX.get(nameKey(nm[1]));
+  if (!id) return null;
+  const form = nm[2] ? Number(nm[2]) : null;
+  return { id, form, valid: form === null || (form >= 1 && form <= DEX[id].forms.length) };
+}
+
+/** "배틀111", "배틀 111", "배틀888-2", "배틀 리자몽", "배틀자시안-2" → { id, form, valid } */
 function parseBattle(content) {
   const m = String(content).trim().match(/^배틀\s*(.+)$/);
   if (!m) return null;
   const q = m[1].trim();
-  const byNum = parseDexQuery(q);
-  if (byNum) return byNum;
-  const nm = q.match(/^(.+?)(?:\s*-\s*(\d{1,2}))?$/);
-  for (const [id, p] of Object.entries(DEX))
-    if (p.ko === nm[1] || p.en.toLowerCase() === nm[1].toLowerCase()) {
-      const form = nm[2] ? Number(nm[2]) : null;
-      return { id: +id, form, valid: form === null || (form >= 1 && form <= p.forms.length) };
-    }
-  return null;
+  return parseDexQuery(q) || parseNameQuery(q);
 }
 
 /**
@@ -237,7 +248,7 @@ function setTypeEmojis(map) {
   for (const [t, e] of Object.entries(map)) if (TYPES[t] && e) TYPES[t][1] = e;
 }
 
-module.exports = { setTypeEmojis, channelMatches, parseDexQuery, parseDexNumber, parseBattle, pvpRanks,
+module.exports = { parseNameQuery, setTypeEmojis, channelMatches, parseDexQuery, parseDexNumber, parseBattle, pvpRanks,
   DEX, CPM, MAX_ID, TYPES, TYPE_COLOR, CHART, effectiveness, formLabel,
   calcCP, calcHP, cpmAt, levels, findId, suggest, pickForm, defenseGroups, bestLeagueLevel, findIVs,
 };

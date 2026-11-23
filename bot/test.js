@@ -109,6 +109,11 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(R("포켓몬개체정보방", "111"), "dex");
   assert.strictEqual(R("💬｜포켓몬개체정보방", "888-2"), "dex");
   assert.strictEqual(R("포켓몬개체정보방", "배틀111"), null);
+  assert.strictEqual(R("포켓몬개체정보방", "리자몽"), "dex");
+  assert.strictEqual(R("포켓몬개체정보방", "자시안-2"), "dex");
+  assert.strictEqual(R("포켓몬개체정보방", "리자몽 잡았다"), null);         // 대화는 무시
+  assert.strictEqual(R("배틀개체정보방", "리자몽"), null);                   // 배틀방은 '배틀' 붙여야
+  assert.strictEqual(R("배틀신청방", "리자몽"), null);
   assert.strictEqual(R("포켓몬개체정보방", "배틀신청 홍길동"), null);
   // 배틀개체정보방: 배틀 도감번호만
   assert.strictEqual(R("배틀개체정보방", "배틀111"), "pvp");
@@ -124,6 +129,16 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   // "*" 이면 모든 채널
   assert.strictEqual(routeMessage({ name: "아무거나", id: "1" }, "111", { dex: ["*"], pvp: [], battle: [] }).kind, "dex");
 }
+
+// 이름만으로 조회
+assert.deepStrictEqual(P.parseNameQuery("리자몽"), { id: 6, form: null, valid: true });
+assert.deepStrictEqual(P.parseNameQuery(" Charizard "), { id: 6, form: null, valid: true });
+assert.deepStrictEqual(P.parseNameQuery("자시안-2"), { id: 888, form: 2, valid: true });
+assert.deepStrictEqual(P.parseNameQuery("자시안 - 3").valid, false);
+assert.strictEqual(P.parseNameQuery("리자"), null);                              // 부분 이름은 무시
+assert.strictEqual(P.parseNameQuery("안녕하세요"), null);
+assert.strictEqual(P.parseNameQuery("Mr. Mime").id, 122);
+for (const [id, p] of Object.entries(P.DEX)) assert.strictEqual(P.parseNameQuery(p.ko).id, +id, p.ko); // 모든 한국어 이름
 
 // 감지 채널 이름 매칭
 const ch = (name, id = "1") => ({ name, id });
