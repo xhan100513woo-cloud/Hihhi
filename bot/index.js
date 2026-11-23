@@ -2,7 +2,7 @@
 // 포켓몬 GO 도감 디스코드 봇
 const { Client, Events, GatewayIntentBits, MessageFlags } = require("discord.js");
 const commands = require("./commands");
-const { dexEmbed, cpEmbed, ivEmbed, battleEmbed } = require("./embeds");
+const { dexEmbed, cpEmbed, ivEmbed, battleEmbed, badForm } = require("./embeds");
 const P = require("./pogo");
 
 try { process.loadEnvFile(require("path").join(__dirname, ".env")); } catch { /* .env 없으면 환경변수 사용 */ }
@@ -76,11 +76,13 @@ function register(client, withMessageContent) {
     const ch = msg.channel;
     const watched = DEX_CHANNELS.includes(ch.id) || DEX_CHANNELS.includes(ch.name);
     if (!watched) return;
-    const battleId = P.parseBattle(msg.content);
-    const id = battleId || P.parseDexNumber(msg.content);
-    if (!id) return;
+    const battle = P.parseBattle(msg.content);
+    const q = battle || P.parseDexQuery(msg.content);
+    if (!q) return;
     try {
-      const payload = battleId ? battleEmbed(String(id)) : dexEmbed(String(id));
+      const form = q.form ? String(q.form) : undefined;
+      const { ephemeral, ...payload } = !q.valid ? badForm(q.id)
+        : battle ? battleEmbed(String(q.id), form) : dexEmbed(String(q.id), form);
       await send(msg, payload);
     } catch (e) {
       console.error("채널 응답 실패:", e.message);
@@ -104,7 +106,7 @@ function register(client, withMessageContent) {
         if (focused.name === "폼") {
           const id = P.findId(it.options.getString("포켓몬") || "");
           const forms = id ? P.DEX[id].forms : [];
-          return it.respond(forms.slice(0, 25).map((f, i) => ({ name: `${i} · ${P.formLabel(f.f)}`.slice(0, 100), value: String(i) })));
+          return it.respond(forms.slice(0, 25).map((f, i) => ({ name: `${id}-${i + 1} · ${P.formLabel(f.f, id)}`.slice(0, 100), value: String(i + 1) })));
         }
         return it.respond([]);
       }

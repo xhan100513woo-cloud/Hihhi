@@ -9,7 +9,24 @@ assert.strictEqual(commands.length, 4);
 
 // 배틀 개체 순위
 for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 150], ["배틀리자몽", 6], ["배틀하자", null], ["배틀", null], ["111배틀", null]])
-  assert.strictEqual(P.parseBattle(txt), want, txt);
+  assert.strictEqual((P.parseBattle(txt) || {}).id ?? null, want, txt);
+
+// 모습 번호 (-1 기본, -2 부터 변화 모습)
+const q = (t) => JSON.stringify(P.parseBattle(t) || P.parseDexQuery(t));
+assert.strictEqual(q("888-1"), JSON.stringify({ id: 888, form: 1, valid: true }));
+assert.strictEqual(q("배틀888-2"), JSON.stringify({ id: 888, form: 2, valid: true }));
+assert.strictEqual(q("배틀자시안-2"), JSON.stringify({ id: 888, form: 2, valid: true }));
+assert.strictEqual(P.parseDexQuery("888-3").valid, false);
+assert.strictEqual(P.parseDexQuery("111-2").valid, false);
+assert.strictEqual(P.parseDexQuery("25-0").valid, false);
+for (const [id, base] of [[888, "Hero"], [889, "Hero"], [487, "Altered"], [641, "Incarnate"], [681, "Shield"], [720, "Confined"], [964, "Zero"], [718, "Complete_fifty_percent"], [555, "Standard"], [6, "Normal"]])
+  assert.strictEqual(P.DEX[id].forms[0].f, base, "기본 모습 " + id);
+for (const sp of Object.values(P.DEX)) {                      // 메가는 항상 맨 뒤
+  const firstMega = sp.forms.findIndex((f) => f.f.startsWith("MEGA:"));
+  assert.ok(firstMega === -1 || sp.forms.slice(firstMega).every((f) => f.f.startsWith("MEGA:")));
+}
+assert.ok(require("./embeds").dexEmbed("888", "2").embeds[0].title.startsWith("No.0888-2 자시안"));
+assert.ok(require("./embeds").badForm(888).content.includes("888-2"));
 assert.strictEqual(P.parseDexNumber("배틀111"), null);
 {
   const ml = P.pvpRanks(P.DEX[3].forms[0].s, Infinity, 50, 10);
@@ -51,7 +68,7 @@ function checkLimits(r) {
   }
 }
 for (const id of Object.keys(P.DEX)) {
-  P.DEX[id].forms.forEach((_, i) => { checkLimits(dexEmbed(id, String(i))); checkLimits(cpEmbed(id, 15, 15, 15, 40, String(i))); });
+  P.DEX[id].forms.forEach((_, i) => { checkLimits(dexEmbed(id, String(i + 1))); checkLimits(cpEmbed(id, 15, 15, 15, 40, String(i + 1))); });
 }
 checkLimits(ivEmbed("6", 2889, null, 0));
 const { battleEmbed } = require("./embeds");

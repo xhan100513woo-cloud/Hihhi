@@ -16,8 +16,23 @@ function resolve(query, form) {
 }
 
 function title(id, sp, f) {
-  const formTxt = f.f === "Normal" ? "" : ` [${P.formLabel(f.f)}]`;
-  return `No.${String(id).padStart(4, "0")} ${sp.ko} (${sp.en})${formTxt}`;
+  const multi = sp.forms.length > 1;
+  const no = `No.${String(id).padStart(4, "0")}${multi ? "-" + (sp.forms.indexOf(f) + 1) : ""}`;
+  const formTxt = multi ? ` [${P.formLabel(f.f, id)}]` : "";
+  return `${no} ${sp.ko} (${sp.en})${formTxt}`;
+}
+
+/** 모습 목록: `888-1` 역전의 용사 · `888-2` 검왕 */
+function formList(id, sp) {
+  return sp.forms.map((x, i) => `\`${id}-${i + 1}\` ${P.formLabel(x.f, id)}`).join(" · ").slice(0, 1024);
+}
+
+/** 범위를 벗어난 모습 번호 안내 */
+function badForm(id) {
+  const sp = P.DEX[id];
+  return { content: sp.forms.length > 1
+    ? `❌ ${sp.ko}의 모습 번호는 ${id}-1 ~ ${id}-${sp.forms.length} 까지 있어요.\n${formList(id, sp)}`
+    : `❌ ${sp.ko}는 모습변화가 없어요. \`${id}\` 로 검색해 주세요.`, ephemeral: true };
 }
 
 function err(msg) { return { content: msg, ephemeral: true }; }
@@ -34,7 +49,7 @@ function dexEmbed(query, form) {
   const strong = f.t.map((t) => `${tname(t)} 기술 → ${P.CHART[t][0].map(tname).join(", ") || "없음"}`).join("\n");
 
   const rng = (lv, fl) => `${P.calcCP(S, [fl, fl, fl], lv)}~**${P.calcCP(S, H, lv)}**`;
-  const forms = sp.forms.length > 1 ? sp.forms.map((x, i) => `\`${i}\` ${P.formLabel(x.f)}`).join(" · ") : null;
+  const forms = sp.forms.length > 1 ? formList(id, sp) : null;
 
   const fields = [
     { name: "타입", value: f.t.map(tname).join(" / "), inline: true },
@@ -54,7 +69,7 @@ function dexEmbed(query, form) {
       [20, 25, 40, 50].map((l) => String(P.calcCP(S, iv, l)).padStart(5)).join(" ");
   }).join("\n");
   fields.push({ name: "📊 개체값별 CP", value: "```\n" + ivTable + "\n```" });
-  if (forms) fields.push({ name: "다른 폼 (`폼` 옵션에 번호 입력)", value: forms.slice(0, 1024) });
+  if (forms) fields.push({ name: "🔄 모습별 번호 (예: " + id + "-2, 배틀" + id + "-2)", value: forms });
 
   return {
     embeds: [{
@@ -130,18 +145,18 @@ function battleEmbed(query, form) {
       `${String(x.rank).padStart(2)}  ${x.iv.map((v) => String(v).padStart(2)).join("/")}  ${String(x.lv).padStart(4)} ${String(x.cp).padStart(5)} ${x.pct.toFixed(1).padStart(5)}`
     ).join("\n") + "\n```"
     : "참가 불가 (최저 CP가 상한을 넘습니다)";
-  const base = f.f.startsWith("MEGA:") ? sp.forms[0] : f;
+  const base = f.f.startsWith("MEGA:") ? sp.forms.find((x) => !x.f.startsWith("MEGA:")) : f;
   const mega = f.f.startsWith("MEGA:") ? f : sp.forms.find((x) => x.f.startsWith("MEGA:"));
   const fields = [
     { name: "🔵 슈퍼리그 (CP 1500)", value: table(P.pvpRanks(base.s, 1500, PVP_MAX_LV)) },
     { name: "🟡 하이퍼리그 (CP 2500)", value: table(P.pvpRanks(base.s, 2500, PVP_MAX_LV)) },
     { name: "🟣 마스터리그 (CP 제한 없음)", value: table(P.pvpRanks(base.s, Infinity, PVP_MAX_LV)) },
-    { name: `🔴 메가마스터리그${mega ? ` (${P.formLabel(mega.f)})` : ""}`,
+    { name: `🔴 메가마스터리그${mega ? ` (${P.formLabel(mega.f, id)})` : ""}`,
       value: mega ? table(P.pvpRanks(mega.s, Infinity, PVP_MAX_LV)) : "메가진화가 없는 포켓몬입니다" },
   ];
   return {
     embeds: [{
-      title: title(id, sp, base) + " · 배틀 개체 순위",
+      title: title(id, sp, f) + " · 배틀 개체 순위",
       description: `최대 레벨 ${PVP_MAX_LV} 기준 · 스탯곱(공×방×HP) 순 · %는 1위 대비`,
       color: P.TYPE_COLOR[base.t[0]],
       thumbnail: { url: ART(id) },
@@ -151,4 +166,4 @@ function battleEmbed(query, form) {
   };
 }
 
-module.exports = { dexEmbed, cpEmbed, ivEmbed, battleEmbed };
+module.exports = { dexEmbed, cpEmbed, ivEmbed, battleEmbed, badForm };

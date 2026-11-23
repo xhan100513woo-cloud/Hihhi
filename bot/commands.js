@@ -1,7 +1,7 @@
 "use strict";
 // 슬래시 명령어 정의
 const pokemon = (o) => o.setName("포켓몬").setDescription("도감번호 또는 이름 (예: 6, 리자몽)").setRequired(true).setAutocomplete(true);
-const form = (o) => o.setName("폼").setDescription("폼 번호 또는 이름 (예: 알로라, 메가) — /도감 결과에 번호가 나옵니다");
+const form = (o) => o.setName("폼").setDescription("모습 번호(1=기본, 2부터 변화 모습) 또는 이름 (예: 2, 알로라, 메가)");
 const { SlashCommandBuilder } = require("discord.js");
 
 module.exports = [

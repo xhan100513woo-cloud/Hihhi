@@ -63,9 +63,41 @@ const FORM_KO = {
   Attack: "어택", Defense: "디펜스", Speed: "스피드", Hero: "역전의 용사", Crowned_sword: "검왕",
   Crowned_shield: "방패왕", Sky: "스카이", Land: "랜드", Black: "블랙", White: "화이트",
   Armored: "아머드", Complete: "퍼펙트", Ten_percent: "10%", Fifty_percent: "50%",
+  Complete_fifty_percent: "50%", Complete_ten_percent: "10%",
+  Aria: "보이스", Pirouette: "스텝", Shield: "실드", Blade: "블레이드",
+  Average: "보통", Small: "작은 사이즈", Large: "큰 사이즈", Super: "특대 사이즈",
+  Confined: "굴레", Unbound: "해방", Baile: "이글이글", Pompom: "파칙파칙", Pau: "훌라훌라", Sensu: "하늘하늘",
+  Midday: "한낮", Midnight: "한밤중", Dusk: "황혼", Solo: "단독", School: "군집",
+  Ice: "아이스페이스", Noice: "나이스페이스", Single_strike: "일격", Rapid_strike: "연격",
+  Standard: "노말", Zen: "달마", Galarian_standard: "가라르", Galarian_zen: "가라르 달마",
+  Plant: "초목도롱", Sandy: "모래땅도롱", Trash: "슈레도롱",
 };
-function formLabel(f) {
+// 같은 폼 이름이 포켓몬마다 다르게 불리는 경우
+const SPECIES_FORM_KO = { 964: { Zero: "나이브", Hero: "마이티" } };
+
+// 모습변화 포켓몬의 폼 순서: 기본 모습이 -1, 변화 모습이 -2 부터 (메가는 맨 뒤)
+const FORM_ORDER = [
+  "Normal", "Hero", "Incarnate", "Altered", "Land", "Aria", "Shield", "Average", "Confined", "Baile",
+  "Midday", "Solo", "Ice", "Male", "Single_strike", "Standard", "Plant", "Zero", "Complete_fifty_percent",
+  "Crowned_sword", "Crowned_shield", "Origin", "Sky", "Therian", "Pirouette", "Blade", "Small", "Large", "Super",
+  "Unbound", "Pompom", "Pau", "Sensu", "Midnight", "Dusk", "School", "Noice", "Female", "Rapid_strike",
+  "Zen", "Galarian_standard", "Galarian_zen", "Sandy", "Trash", "Complete_ten_percent", "Complete",
+];
+// 같은 폼 이름의 기본/변화가 포켓몬마다 다른 경우 (돌핀맨: 나이브가 기본, 마이티(Hero)가 변화)
+const SPECIES_FORM_ORDER = { 964: ["Zero", "Hero"] };
+for (const [id, sp] of Object.entries(DEX)) {
+  const order = SPECIES_FORM_ORDER[id] || FORM_ORDER;
+  const rank = (f) => {
+    if (f.f.startsWith("MEGA:")) return 1e6;
+    const i = order.indexOf(f.f);
+    return i === -1 ? 1e3 : i;
+  };
+  sp.forms = sp.forms.map((f, i) => ({ f, i })).sort((a, b) => rank(a.f) - rank(b.f) || a.i - b.i).map((x) => x.f);
+}
+
+function formLabel(f, id) {
   if (f.startsWith("MEGA:")) return "메가 · " + f.slice(5);
+  if (id && SPECIES_FORM_KO[id] && SPECIES_FORM_KO[id][f]) return SPECIES_FORM_KO[id][f];
   if (FORM_KO[f]) return FORM_KO[f];
   for (const k of Object.keys(FORM_KO)) if (f.startsWith(k + "_")) return FORM_KO[k] + " (" + f + ")";
   return f.replace(/_/g, " ");
@@ -100,10 +132,10 @@ function suggest(q) {
   return out;
 }
 
-/** 폼 선택: 인덱스 번호 또는 폼 이름 일부 */
+/** 폼 선택: 1부터 시작하는 번호(1 = 기본 모습) 또는 폼 이름 일부 */
 function pickForm(sp, form) {
   if (form === undefined || form === null || form === "") return sp.forms[0];
-  if (/^\d+$/.test(String(form)) && sp.forms[+form]) return sp.forms[+form];
+  if (/^\d+$/.test(String(form))) return sp.forms[+form - 1] || sp.forms[0];
   const q = String(form).toLowerCase();
   return sp.forms.find((f) => f.f.toLowerCase().includes(q) || formLabel(f.f).toLowerCase().includes(q)) || sp.forms[0];
 }
@@ -136,21 +168,38 @@ function findIVs(S, cp, hp, floor = 0) {
 }
 
 /** 메시지가 도감번호만으로 이루어져 있으면 번호를 돌려준다 (예: "25", "#150", "No.6", "6번") */
-function parseDexNumber(content) {
-  const m = String(content).trim().match(/^(?:#|no\.?\s*)?0*(\d{1,4})(?:번)?$/i);
+/**
+ * 도감번호(+모습 번호) 해석: "25", "#150", "No.6", "6번", "888-2" →
+ * { id, form: 1부터 시작하는 모습 번호 | null, valid: 모습 번호가 범위 안인지 }
+ */
+function parseDexQuery(content) {
+  const m = String(content).trim().match(/^(?:#|no\.?\s*)?0*(\d{1,4})(?:\s*-\s*(\d{1,2}))?(?:번)?$/i);
   if (!m) return null;
   const id = Number(m[1]);
-  return DEX[id] ? id : null;
+  if (!DEX[id]) return null;
+  const form = m[2] ? Number(m[2]) : null;
+  return { id, form, valid: form === null || (form >= 1 && form <= DEX[id].forms.length) };
 }
 
-/** "배틀111", "배틀 111", "배틀#111", "배틀 리자몽" → 도감번호 */
+/** 메시지가 도감번호만으로 이루어져 있으면 번호를 돌려준다 (예: "25", "#150", "No.6", "6번", "888-2") */
+function parseDexNumber(content) {
+  const q = parseDexQuery(content);
+  return q ? q.id : null;
+}
+
+/** "배틀111", "배틀 111", "배틀888-2", "배틀 리자몽", "배틀자시안-2" → { id, form, valid } */
 function parseBattle(content) {
   const m = String(content).trim().match(/^배틀\s*(.+)$/);
   if (!m) return null;
   const q = m[1].trim();
-  const n = parseDexNumber(q);
-  if (n) return n;
-  for (const [id, p] of Object.entries(DEX)) if (p.ko === q || p.en.toLowerCase() === q.toLowerCase()) return +id;
+  const byNum = parseDexQuery(q);
+  if (byNum) return byNum;
+  const nm = q.match(/^(.+?)(?:\s*-\s*(\d{1,2}))?$/);
+  for (const [id, p] of Object.entries(DEX))
+    if (p.ko === nm[1] || p.en.toLowerCase() === nm[1].toLowerCase()) {
+      const form = nm[2] ? Number(nm[2]) : null;
+      return { id: +id, form, valid: form === null || (form >= 1 && form <= p.forms.length) };
+    }
   return null;
 }
 
@@ -174,7 +223,7 @@ function pvpRanks(S, cap = Infinity, maxLv = 50, top = 10) {
   return res.slice(0, top).map((r, i) => ({ ...r, rank: i + 1, pct: r.sp / best * 100 }));
 }
 
-module.exports = { parseDexNumber, parseBattle, pvpRanks,
+module.exports = { parseDexQuery, parseDexNumber, parseBattle, pvpRanks,
   DEX, CPM, MAX_ID, TYPES, TYPE_COLOR, CHART, effectiveness, formLabel,
   calcCP, calcHP, cpmAt, levels, findId, suggest, pickForm, defenseGroups, bestLeagueLevel, findIVs,
 };
