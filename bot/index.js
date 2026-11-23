@@ -12,9 +12,12 @@ const clean = (v) => String(v || "").trim().replace(/^["'`]+|["'`]+$/g, "").repl
 const DISCORD_TOKEN = clean(process.env.DISCORD_TOKEN);
 const GUILD_ID = clean(process.env.GUILD_ID);
 // 도감번호를 감지할 채널 (쉼표로 여러 개). 채널 ID 또는 이름 모두 가능
-const DEX_CHANNELS = (process.env.DEX_CHANNELS || "메인정보방").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
-// "배틀신청 닉네임" 을 받을 채널 (이름에 포함되면 감지, 쉼표로 여러 개)
-const BATTLE_CHANNELS = (process.env.BATTLE_CHANNELS || "배틀신청").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
+const channelList = (v, def) => (v || def).split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
+// 채널 이름에 포함되면 감지 (쉼표로 여러 개, "*" 은 모든 채널)
+const DEX_CHANNELS = channelList(process.env.DEX_CHANNELS, "포켓몬개체정보방");   // 111, 888-2
+const PVP_CHANNELS = channelList(process.env.PVP_CHANNELS, "배틀개체정보방");     // 배틀111
+const BATTLE_CHANNELS = channelList(process.env.BATTLE_CHANNELS, "배틀신청");     // 배틀신청 닉네임
+const { routeMessage } = require("./router");
 const BR = require("./battle-request");
 
 console.log("⚙️ 설정 확인:",
@@ -22,6 +25,7 @@ console.log("⚙️ 설정 확인:",
   `WEBHOOK_URL=${process.env.WEBHOOK_URL ? "있음" : "없음"}`,
   `GUILD_ID=${GUILD_ID || "없음"}`,
   `DEX_CHANNELS=${DEX_CHANNELS.join(",")}`,
+  `PVP_CHANNELS=${PVP_CHANNELS.join(",")}`,
   `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN 이 설정되지 않았습니다. Railway → Variables 에 DISCORD_TOKEN 을 추가해 주세요.");
@@ -54,12 +58,17 @@ async function send(msg, payload) {
 
 /** 서버별로 감지하는 채널을 로그에 남긴다 (없으면 경고) */
 function reportGuild(g) {
-  const chans = g.channels.cache.filter((c) => c.isTextBased && c.isTextBased() && P.channelMatches(c, DEX_CHANNELS));
-  if (chans.size) console.log(`🏠 서버 '${g.name}': 감지 채널 ${chans.map((c) => "#" + c.name).join(", ")}`);
-  else console.error(`⚠️ 서버 '${g.name}': 이름에 '${DEX_CHANNELS.join("/")}' 가 들어간 채널이 없어 숫자 입력에 반응하지 않습니다. ` +
-    "(채널 이름을 바꾸거나 Railway Variables 의 DEX_CHANNELS 에 채널 이름을 추가하세요. 슬래시 명령어는 어디서나 동작)");
-  const bch = g.channels.cache.filter((c) => c.isTextBased && c.isTextBased() && P.channelMatches(c, BATTLE_CHANNELS));
-  if (bch.size) console.log(`⚔️ 서버 '${g.name}': 배틀신청 채널 ${bch.map((c) => "#" + c.name).join(", ")}`);
+  const find = (list) => g.channels.cache.filter((c) => c.isTextBased && c.isTextBased() && P.channelMatches(c, list));
+  for (const [label, list, what] of [
+    ["📖 도감번호", DEX_CHANNELS, "DEX_CHANNELS"],
+    ["🏆 배틀개체", PVP_CHANNELS, "PVP_CHANNELS"],
+    ["⚔️ 배틀신청", BATTLE_CHANNELS, "BATTLE_CHANNELS"],
+  ]) {
+    const chans = find(list);
+    if (chans.size) console.log(`${label} 서버 '${g.name}': ${chans.map((c) => "#" + c.name).join(", ")}`);
+    else console.error(`⚠️ ${label} 서버 '${g.name}': 이름에 '${list.join("/")}' 가 들어간 채널이 없습니다 ` +
+      `(채널 이름을 바꾸거나 Railway Variables 의 ${what} 에 채널 이름을 추가하세요)`);
+  }
 }
 
 /** "배틀신청 닉네임" 처리: 멘션이 있으면 그 사람, 없으면 서버 멤버 검색 */
@@ -181,18 +190,14 @@ function register(client, withMessageContent) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
-    if (P.channelMatches(ch, BATTLE_CHANNELS)) {
-      const cmd = BR.parseBattleCommand(msg.content);
-      if (cmd) {
-        try { await handleBattleCommand(msg, cmd); }
-        catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
-        return;
-      }
+    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS });
+    if (!route) return;
+    if (route.kind === "battleCmd") {
+      try { await handleBattleCommand(msg, route.cmd); }
+      catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
+      return;
     }
-    if (!P.channelMatches(ch, DEX_CHANNELS)) return;
-    const battle = P.parseBattle(msg.content);
-    const q = battle || P.parseDexQuery(msg.content);
-    if (!q) return;
+    const q = route.q, battle = route.kind === "pvp";
     try {
       const form = q.form ? String(q.form) : undefined;
       const { ephemeral, ...payload } = !q.valid ? badForm(q.id)
@@ -212,7 +217,7 @@ function register(client, withMessageContent) {
     if (GUILD_ID) await c.application.commands.set(commands, GUILD_ID);
     else await c.application.commands.set(commands);
     console.log(`✅ ${c.user.tag} 로그인 완료 · 명령어 ${commands.length}개 등록 (${GUILD_ID ? "서버 " + GUILD_ID : "전역"})`);
-    if (withMessageContent) console.log(`👀 도감번호 감지 채널: ${DEX_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
+    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
     else console.log("⚠️ 슬래시 명령어 전용 모드 (MESSAGE CONTENT INTENT 를 켜면 채널 감지가 동작합니다)");
     for (const g of c.guilds.cache.values()) reportGuild(g);
   });

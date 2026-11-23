@@ -100,6 +100,31 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(BR.buildRequests(hist, BOT).length, 1);
 }
 
+// 채널별 기능 분리
+{
+  const { routeMessage } = require("./router");
+  const cfg = { dex: ["포켓몬개체정보방"], pvp: ["배틀개체정보방"], battle: ["배틀신청"] };
+  const R = (name, text) => { const r = routeMessage({ name, id: "1" }, text, cfg); return r ? r.kind : null; };
+  // 포켓몬개체정보방: 도감번호만
+  assert.strictEqual(R("포켓몬개체정보방", "111"), "dex");
+  assert.strictEqual(R("💬｜포켓몬개체정보방", "888-2"), "dex");
+  assert.strictEqual(R("포켓몬개체정보방", "배틀111"), null);
+  assert.strictEqual(R("포켓몬개체정보방", "배틀신청 홍길동"), null);
+  // 배틀개체정보방: 배틀 도감번호만
+  assert.strictEqual(R("배틀개체정보방", "배틀111"), "pvp");
+  assert.strictEqual(R("배틀개체정보방", "111"), null);
+  assert.strictEqual(R("배틀개체정보방", "배틀신청 홍길동"), null);
+  // 배틀신청방: 배틀신청만
+  assert.strictEqual(R("배틀신청방", "배틀신청 홍길동"), "battleCmd");
+  assert.strictEqual(R("배틀신청방", "배틀 종료"), "battleCmd");
+  assert.strictEqual(R("배틀신청방", "111"), null);
+  assert.strictEqual(R("배틀신청방", "배틀111"), null);
+  // 그 외 채널: 반응 없음
+  for (const t of ["111", "배틀111", "배틀신청 홍길동"]) assert.strictEqual(R("일반", t), null);
+  // "*" 이면 모든 채널
+  assert.strictEqual(routeMessage({ name: "아무거나", id: "1" }, "111", { dex: ["*"], pvp: [], battle: [] }).kind, "dex");
+}
+
 // 감지 채널 이름 매칭
 const ch = (name, id = "1") => ({ name, id });
 assert.ok(P.channelMatches(ch("일반"), ["일반"]));
