@@ -53,8 +53,11 @@ function requestMessage(result, query, author) {
  *  "배틀신청 확인"          → { type: "check" }
  *  "배틀신청 수락 [닉네임]"  → { type: "accept", query: 닉네임 | null }
  *  "배틀신청 닉네임"         → { type: "request", query }
+ *  "배틀 종료 [닉네임]"      → { type: "end", query: 닉네임 | null }
  */
 function parseBattleCommand(content) {
+  const end = String(content).trim().match(/^배틀\s*종료(?:\s+(.+))?$/s);
+  if (end) return { type: "end", query: end[1] ? end[1].trim() : null };
   const rest = parseBattleRequest(content);
   if (rest === null) return null;
   if (/^확인$/.test(rest)) return { type: "check" };
@@ -66,13 +69,14 @@ function parseBattleCommand(content) {
 // 봇이 보낸 메시지에서 신청/수락 기록을 읽어 낸다 (별도 저장소 없이 채널 기록이 곧 데이터)
 const REQ_RE = /^<@!?(\d+)>\n⚔️ .* 님과 배틀신청이 완료되었습니다\.\n\(신청자: <@!?(\d+)>\)/;
 const ACC_RE = /^<@!?(\d+)>\n✅ .* 배틀신청을 수락했습니다!\n\(수락: <@!?(\d+)>\)/;
+const END_RE = /🏁 .* 배틀이 종료되었습니다\.\n\(종료: <@!?(\d+)>(?:, 상대: <@!?(\d+)>)?\)/;
 
 /**
  * messages: [{ authorId, content, time }] (순서 무관), botId: 봇 사용자 ID
- * 반환: 오래된 순 [{ challenger, target, time, accepted }]
+ * 반환: 오래된 순 [{ challenger, target, time, accepted }] — '배틀 종료' 된 신청은 빠짐
  */
 function buildRequests(messages, botId) {
-  const list = [];
+  let list = [];
   for (const m of [...messages].sort((a, b) => a.time - b.time)) {
     if (m.authorId !== botId) continue;
     let r = m.content.match(REQ_RE);
@@ -82,9 +86,39 @@ function buildRequests(messages, botId) {
       const [, challenger, target] = r;
       for (let i = list.length - 1; i >= 0; i--)
         if (list[i].challenger === challenger && list[i].target === target && !list[i].accepted) { list[i].accepted = true; break; }
+      continue;
     }
+    r = m.content.match(END_RE);
+    if (r) list = list.filter((x) => !involves(x, r[1], r[2]));
   }
   return list;
+}
+
+/** 신청 x 가 user 와 관련 있는지 (partner 가 있으면 그 상대와의 신청만) */
+function involves(x, user, partner) {
+  const other = x.challenger === user ? x.target : x.target === user ? x.challenger : null;
+  return other !== null && (!partner || other === partner);
+}
+
+/** '배틀 종료' 로 지워질 신청 수 */
+function countEnding(requests, userId, partnerId) {
+  return requests.filter((x) => involves(x, userId, partnerId)).length;
+}
+
+/** 종료 메시지 (상대를 지정했으면 상대에게만 알림) */
+function endMessage(user, partner, count) {
+  if (!count) {
+    return { content: partner
+      ? `❌ **${partner.displayName}** 님과의 배틀신청 기록이 없어요.`
+      : "❌ 종료할 배틀신청이 없어요. `배틀신청 확인` 으로 목록을 볼 수 있어요.",
+    allowedMentions: { parse: [], repliedUser: false } };
+  }
+  const who = partner ? `**${user.displayName}** 님과 **${partner.displayName}** 님의` : `**${user.displayName}** 님의`;
+  return {
+    content: `${partner ? `<@${partner.id}>\n` : ""}🏁 ${who} 배틀이 종료되었습니다.\n(종료: <@${user.id}>${partner ? `, 상대: <@${partner.id}>` : ""})\n` +
+      `배틀신청 ${count}건이 \`배틀신청 확인\` 목록에서 지워졌어요.`,
+    allowedMentions: { users: partner ? [partner.id] : [], repliedUser: false },
+  };
 }
 
 /** 나(userId)에게 온 대기 중 신청 중 가장 최근 것 (challengerId 가 있으면 그 사람 것만) */
@@ -108,6 +142,7 @@ function checkMessage(requests, userId) {
   lines.push("", "**📤 보낸 신청**");
   lines.push(...(sent.length ? sent.map((r) => `· 나 → <@${r.target}> 님  ${st(r)}  ${ts(r.time)}`) : ["없음"]));
   if (got.some((r) => !r.accepted)) lines.push("", "수락하려면 `배틀신청 수락 닉네임` (또는 `배틀신청 수락` 으로 가장 최근 신청 수락)");
+  if (got.length || sent.length) lines.push("", "배틀이 끝나면 `배틀 종료` (특정 상대만: `배틀 종료 닉네임`) 로 목록에서 지울 수 있어요.");
   return { content: lines.join("\n"), allowedMentions: { parse: [], repliedUser: false } };
 }
 
@@ -119,4 +154,5 @@ function acceptMessage(request, accepter) {
   };
 }
 
-module.exports = { parseBattleRequest, parseBattleCommand, pickMember, requestMessage, buildRequests, findPending, checkMessage, acceptMessage };
+module.exports = { parseBattleRequest, parseBattleCommand, pickMember, requestMessage, buildRequests, findPending,
+  checkMessage, acceptMessage, countEnding, endMessage };

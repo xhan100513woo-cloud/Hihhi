@@ -74,6 +74,30 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   const chk = BR.checkMessage(reqs, "3").content;                                  // 철수 입장
   assert.ok(chk.includes("나 → <@1> 님  ✅ 수락됨") && chk.includes("<@2> 님 → 나  ⏳ 대기 중"));
   assert.deepStrictEqual(BR.checkMessage(reqs, "3").allowedMentions.parse, []);    // 확인은 아무도 알림 안 감
+
+  // 배틀 종료
+  assert.deepStrictEqual(BR.parseBattleCommand("배틀 종료"), { type: "end", query: null });
+  assert.deepStrictEqual(BR.parseBattleCommand("배틀종료 홍길동"), { type: "end", query: "홍길동" });
+  assert.strictEqual(P.parseBattle("배틀종료"), null);                              // 배틀 개체 명령과 겹치지 않음
+  // 철수(3)가 홍길동(1)과의 배틀만 종료 → 홍길순(2) 신청은 남음
+  assert.strictEqual(BR.countEnding(reqs, "3", "1"), 1);
+  const end1 = BR.endMessage({ id: "3", displayName: "철수" }, { id: "1", displayName: "홍길동" }, 1);
+  assert.ok(end1.content.startsWith("<@1>") && end1.content.includes("배틀이 종료되었습니다"));
+  assert.deepStrictEqual(end1.allowedMentions.users, ["1"]);
+  post(end1, 4000);
+  reqs = BR.buildRequests(hist, BOT);
+  assert.deepStrictEqual(reqs.map((r) => r.challenger + ">" + r.target), ["2>3"]);
+  // 철수(3)가 전체 종료 → 모두 지워짐, 아무에게도 알림 없음
+  const end2 = BR.endMessage({ id: "3", displayName: "철수" }, null, BR.countEnding(reqs, "3", null));
+  assert.deepStrictEqual(end2.allowedMentions.users, []);
+  post(end2, 5000);
+  reqs = BR.buildRequests(hist, BOT);
+  assert.strictEqual(reqs.length, 0);
+  assert.ok(BR.checkMessage(reqs, "3").content.includes("없음"));
+  assert.ok(BR.endMessage({ id: "3", displayName: "철수" }, null, 0).content.startsWith("❌"));
+  // 종료 후 새 신청은 다시 보임
+  post(ok, 6000);
+  assert.strictEqual(BR.buildRequests(hist, BOT).length, 1);
 }
 
 // 감지 채널 이름 매칭

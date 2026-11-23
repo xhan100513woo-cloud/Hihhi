@@ -102,6 +102,15 @@ async function handleBattleCommand(msg, cmd) {
   }
   const requests = await loadRequests(msg.channel);
   if (cmd.type === "check") return msg.reply(BR.checkMessage(requests, author.id));
+  if (cmd.type === "end") {
+    let partner = null;
+    if (cmd.query) {
+      const r = await resolveMember(msg, cmd.query, author.id);
+      if (!r.member) return msg.reply(BR.requestMessage(r, cmd.query, author));
+      partner = r.member;
+    }
+    return msg.reply(BR.endMessage(author, partner, BR.countEnding(requests, author.id, partner && partner.id)));
+  }
   // 수락
   let challengerId = null;
   if (cmd.query) {
