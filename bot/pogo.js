@@ -225,7 +225,7 @@ function pvpRanks(S, cap = Infinity, maxLv = 50, top = 10) {
 
 /**
  * 채널이 감지 대상인지: 채널 ID가 같거나, 이모지·기호를 뺀 채널 이름에 설정한 이름이 들어 있으면 true.
- * 예) 설정 "일반" → "일반", "💬｜일반", "일반-채팅" 모두 해당. "*" 이면 모든 채널.
+ * 예) 설정 "메인정보방" → "메인정보방", "💬｜메인정보방", "메인정보방-1" 모두 해당. "*" 이면 모든 채널.
  */
 const normName = (s) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 function channelMatches(channel, entries) {

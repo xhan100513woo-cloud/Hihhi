@@ -12,7 +12,7 @@ const clean = (v) => String(v || "").trim().replace(/^["'`]+|["'`]+$/g, "").repl
 const DISCORD_TOKEN = clean(process.env.DISCORD_TOKEN);
 const GUILD_ID = clean(process.env.GUILD_ID);
 // 도감번호를 감지할 채널 (쉼표로 여러 개). 채널 ID 또는 이름 모두 가능
-const DEX_CHANNELS = (process.env.DEX_CHANNELS || "일반").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
+const DEX_CHANNELS = (process.env.DEX_CHANNELS || "메인정보방").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
 
 console.log("⚙️ 설정 확인:",
   `DISCORD_TOKEN=${DISCORD_TOKEN ? `있음(${DISCORD_TOKEN.length}자)` : "없음"}`,
