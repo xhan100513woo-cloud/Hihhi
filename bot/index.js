@@ -13,12 +13,16 @@ const DISCORD_TOKEN = clean(process.env.DISCORD_TOKEN);
 const GUILD_ID = clean(process.env.GUILD_ID);
 // 도감번호를 감지할 채널 (쉼표로 여러 개). 채널 ID 또는 이름 모두 가능
 const DEX_CHANNELS = (process.env.DEX_CHANNELS || "메인정보방").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
+// "배틀신청 닉네임" 을 받을 채널 (이름에 포함되면 감지, 쉼표로 여러 개)
+const BATTLE_CHANNELS = (process.env.BATTLE_CHANNELS || "배틀신청").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
+const BR = require("./battle-request");
 
 console.log("⚙️ 설정 확인:",
   `DISCORD_TOKEN=${DISCORD_TOKEN ? `있음(${DISCORD_TOKEN.length}자)` : "없음"}`,
   `WEBHOOK_URL=${process.env.WEBHOOK_URL ? "있음" : "없음"}`,
   `GUILD_ID=${GUILD_ID || "없음"}`,
-  `DEX_CHANNELS=${DEX_CHANNELS.join(",")}`);
+  `DEX_CHANNELS=${DEX_CHANNELS.join(",")}`,
+  `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN 이 설정되지 않았습니다. Railway → Variables 에 DISCORD_TOKEN 을 추가해 주세요.");
   process.exit(1);
@@ -54,6 +58,27 @@ function reportGuild(g) {
   if (chans.size) console.log(`🏠 서버 '${g.name}': 감지 채널 ${chans.map((c) => "#" + c.name).join(", ")}`);
   else console.error(`⚠️ 서버 '${g.name}': 이름에 '${DEX_CHANNELS.join("/")}' 가 들어간 채널이 없어 숫자 입력에 반응하지 않습니다. ` +
     "(채널 이름을 바꾸거나 Railway Variables 의 DEX_CHANNELS 에 채널 이름을 추가하세요. 슬래시 명령어는 어디서나 동작)");
+  const bch = g.channels.cache.filter((c) => c.isTextBased && c.isTextBased() && P.channelMatches(c, BATTLE_CHANNELS));
+  if (bch.size) console.log(`⚔️ 서버 '${g.name}': 배틀신청 채널 ${bch.map((c) => "#" + c.name).join(", ")}`);
+}
+
+/** "배틀신청 닉네임" 처리: 멘션이 있으면 그 사람, 없으면 서버 멤버 검색 */
+async function handleBattleRequest(msg, query) {
+  const author = { id: msg.author.id, displayName: msg.member?.displayName || msg.author.username };
+  let members = [];
+  const mentioned = msg.mentions.members?.first();
+  if (mentioned) members = [mentioned];
+  else {
+    try {
+      const found = await msg.guild.members.search({ query: query.replace(/^@/, ""), limit: 10 });
+      members = [...found.values()];
+    } catch (e) {
+      console.error("⚠️ 멤버 검색 실패:", e.message);
+    }
+  }
+  const list = members.map((m) => ({ id: m.id, displayName: m.displayName, username: m.user.username, bot: m.user.bot }));
+  const result = mentioned ? BR.pickMember(list, list[0].displayName, author.id) : BR.pickMember(list, query, author.id);
+  await msg.reply(BR.requestMessage(result, query, author));
 }
 
 /**
@@ -110,6 +135,14 @@ function register(client, withMessageContent) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
+    if (P.channelMatches(ch, BATTLE_CHANNELS)) {
+      const query = BR.parseBattleRequest(msg.content);
+      if (query) {
+        try { await handleBattleRequest(msg, query); }
+        catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
+        return;
+      }
+    }
     if (!P.channelMatches(ch, DEX_CHANNELS)) return;
     const battle = P.parseBattle(msg.content);
     const q = battle || P.parseDexQuery(msg.content);

@@ -21,6 +21,31 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   P.setTypeEmojis({ Fire: before });
 }
 
+// 배틀신청
+{
+  const BR = require("./battle-request");
+  assert.strictEqual(BR.parseBattleRequest("배틀신청 피카츄짱"), "피카츄짱");
+  assert.strictEqual(BR.parseBattleRequest("배틀 신청  홍길동 "), "홍길동");
+  assert.strictEqual(BR.parseBattleRequest("배틀신청"), null);
+  assert.strictEqual(BR.parseBattleRequest("배틀111"), null);
+  assert.strictEqual(P.parseBattle("배틀신청 홍길동"), null);   // 배틀 개체 명령과 겹치지 않음
+  const ms = [
+    { id: "1", displayName: "홍길동", username: "hong", bot: false },
+    { id: "2", displayName: "홍길순", username: "hong2", bot: false },
+    { id: "3", displayName: "철수", username: "chulsoo", bot: false },
+    { id: "9", displayName: "도감봇", username: "dexbot", bot: true },
+  ];
+  assert.strictEqual(BR.pickMember(ms, "홍길동", "3").member.id, "1");   // 정확히 일치 우선
+  assert.strictEqual(BR.pickMember(ms, "CHULSOO", "1").member.id, "3");  // 아이디·대소문자
+  assert.strictEqual(BR.pickMember(ms, "홍길", "3").error, "ambiguous");
+  assert.strictEqual(BR.pickMember(ms, "영희", "3").error, "notfound");
+  assert.strictEqual(BR.pickMember(ms, "철수", "3").error, "self");
+  assert.strictEqual(BR.pickMember(ms, "도감봇", "3").error, "bot");
+  const ok = BR.requestMessage(BR.pickMember(ms, "홍길동", "3"), "홍길동", { displayName: "철수" });
+  assert.ok(ok.content.startsWith("<@1>") && ok.content.includes("**홍길동** 님과 배틀신청이 완료되었습니다."));
+  assert.deepStrictEqual(ok.allowedMentions.users, ["1"]);
+}
+
 // 감지 채널 이름 매칭
 const ch = (name, id = "1") => ({ name, id });
 assert.ok(P.channelMatches(ch("일반"), ["일반"]));
