@@ -26,4 +26,7 @@ module.exports = [
     .addStringOption(pokemon).addStringOption(form),
   new SlashCommandBuilder().setName("획득").setDescription("포켓몬 GO 획득 경로 (진화·알·둥지·레이드/리서치 전용·지역 한정 등)")
     .addStringOption(pokemon),
+  new SlashCommandBuilder().setName("일정").setDescription("포켓몬 GO 일정 (현재 진행 중 / 다가오는 일정)")
+    .addStringOption((o) => o.setName("종류").setDescription("현재 또는 다음 (기본: 현재)")
+      .addChoices({ name: "현재 진행 중", value: "현재" }, { name: "다가오는 일정", value: "다음" })),
 ].map((c) => c.toJSON());
