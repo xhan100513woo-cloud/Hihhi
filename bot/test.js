@@ -220,6 +220,45 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "친코등록 123456789012", cfg), null);
 }
 
+// 내 위치
+(async () => {
+  const L = require("./location");
+  assert.ok(L.isLocationCommand("내위치") && L.isLocationCommand(" 내 위치 ") && !L.isLocationCommand("내위치 알려줘"));
+  assert.deepStrictEqual(L.cleanCoords("37.5665351", "126.9779692", "20.4"), { lat: 37.566535, lng: 126.977969, acc: 20 });
+  assert.strictEqual(L.cleanCoords(91, 0), null);
+  assert.strictEqual(L.cleanCoords("abc", 0), null);
+  // 토큰: 1회용, 10분 만료
+  const t = L.createToken({ userId: "1", displayName: "홍길동", channelId: "9" }, 1000);
+  assert.ok(L.peekToken(t, 1000 + L.TOKEN_TTL_MS - 1));
+  assert.strictEqual(L.peekToken(t, 1000 + L.TOKEN_TTL_MS + 1), null);
+  // 채널 메시지: 좌표·정확도·지도, 멘션 알림 없음
+  const pm = L.postMessage({ displayName: "홍길동" }, { lat: 37.566535, lng: 126.977969, acc: 20 });
+  assert.ok(pm.content.includes("`37.566535, 126.977969`") && pm.content.includes("정확도 약 20m") && pm.content.includes("google.com/maps"));
+  assert.deepStrictEqual(pm.allowedMentions.parse, []);
+  assert.ok(!L.pageHtml("x", { displayName: "<script>" }).includes("<b><script>"));   // 이름 HTML 이스케이프
+  // 실제 서버
+  const posted = [];
+  const server = L.startServer(0, async (info, c) => posted.push([info.channelId, c]));
+  await new Promise((r) => server.once("listening", r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const tok = L.createToken({ userId: "1", displayName: "홍길동", channelId: "9" });
+  const page = await (await fetch(`${base}/loc?t=${tok}`)).text();
+  assert.ok(page.includes("홍길동") && page.includes("내 위치 가져오기"));
+  assert.ok((await (await fetch(`${base}/loc?t=bad`)).text()).includes("만료"));
+  const post = (body) => fetch(`${base}/api/loc`, { method: "POST", body: JSON.stringify(body) });
+  assert.strictEqual((await post({ t: tok, lat: 999, lng: 0 })).status, 400);              // 잘못된 좌표 (토큰은 그대로)
+  const ok = await post({ t: tok, lat: 37.5665351, lng: 126.9779692, acc: 12 });
+  assert.strictEqual(ok.status, 200);
+  assert.deepStrictEqual(posted, [["9", { lat: 37.566535, lng: 126.977969, acc: 12 }]]);
+  assert.strictEqual((await post({ t: tok, lat: 1, lng: 1 })).status, 410);               // 1회용
+  server.close();
+  // 채널 라우팅
+  const { routeMessage } = require("./router");
+  assert.deepStrictEqual(routeMessage({ name: "내위치", id: "1" }, "내위치", { dex: [], pvp: [], battle: [], location: ["내위치"] }), { kind: "location" });
+  assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "내위치", { dex: ["포켓몬개체정보방"], pvp: [], battle: [], location: ["내위치"] }), null);
+  console.log("위치 테스트 통과");
+})().catch((e) => { console.error(e); process.exit(1); });
+
 // 포켓몬 GO 일정
 (async () => {
   const S = require("./schedule");

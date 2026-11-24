@@ -6,15 +6,18 @@
 //  - 포켓몬획득정보방 : 도감번호 또는 이름 → 획득 경로
 //  - 포켓몬고일정     : 현재일정 / 다음일정
 //  - 친코등록         : 친코등록 12자리 / 친코확인 닉네임
+//  - 내위치           : 내위치 → 1회용 위치 링크
 const P = require("./pogo");
 const BR = require("./battle-request");
 const { parseScheduleCommand } = require("./schedule");
 const { parseFriendCommand } = require("./friendcode");
+const { isLocationCommand } = require("./location");
 
 /**
  * @returns {{kind:"battleCmd",cmd}|{kind:"pvp",q}|{kind:"acq",q}|{kind:"dex",q}|null}
  */
-function routeMessage(channel, content, { dex, pvp, battle, acq = [], schedule = [], friend = [] }) {
+function routeMessage(channel, content, { dex, pvp, battle, acq = [], schedule = [], friend = [], location = [] }) {
+  if (P.channelMatches(channel, location) && isLocationCommand(content)) return { kind: "location" };
   if (P.channelMatches(channel, friend)) {
     const cmd = parseFriendCommand(content);
     if (cmd) return { kind: "friend", cmd };
