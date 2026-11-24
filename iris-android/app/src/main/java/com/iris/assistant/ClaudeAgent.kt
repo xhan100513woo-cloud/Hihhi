@@ -42,7 +42,7 @@ class ClaudeAgent(private val prefs: Prefs, private val tools: PhoneTools) : Ass
     @Synchronized
     override fun ask(userText: String): String {
         val key = prefs.claudeKey
-        if (key.isBlank()) return "아직 API 키가 없어요. 아이리스 앱을 열어서 Claude API 키를 넣어 주세요."
+        if (key.isBlank()) return "아직 API 키가 없어요. 민규 앱을 열어서 Claude API 키를 넣어 주세요."
         if (client == null || clientKey != key) {
             client = AnthropicOkHttpClient.builder().apiKey(key).build()
             clientKey = key

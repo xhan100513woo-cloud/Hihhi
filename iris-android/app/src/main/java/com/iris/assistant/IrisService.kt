@@ -72,7 +72,7 @@ class IrisService : Service() {
                 val m = Model(ModelManager.modelDir(this).absolutePath)
                 main.post {
                     model = m
-                    wake = WakeWordListener(m, { prefs.wakeDistance }, { heard(it) }) { onWakeWord() }
+                    wake = WakeWordListener(this, m, { heard(it) }) { onWakeWord() }
                     command = CommandListener(this, m)
                     startWaiting()
                 }
@@ -109,7 +109,7 @@ class IrisService : Service() {
         busy = false
         command?.cancel()
         wake?.start()
-        status("대기 중 — \"아이리스\"라고 불러 주세요")
+        status("대기 중 — \"민규\"라고 불러 주세요")
     }
 
     private fun onWakeWord() {
@@ -133,13 +133,13 @@ class IrisService : Service() {
     private fun handleCommand(text: String) {
         busy = true
         wake?.stop()
-        val cleaned = text.replace(Regex("^\\s*아이\\s?리스[야아,\\s]*"), "").ifBlank { text }
+        val cleaned = text.replace(Regex("^\\s*민\\s?규[야아,\\s]*"), "").ifBlank { text }
         log("나: $cleaned")
         status("생각 중… \"$cleaned\"")
         worker.execute {
             val answer = agent.ask(cleaned)
             main.post {
-                log("아이리스: $answer")
+                log("민규: $answer")
                 status("말하는 중…")
                 speaker.speak(answer) {
                     // 되묻는 질문이면 호출어 없이 바로 대답을 듣는다
@@ -155,7 +155,7 @@ class IrisService : Service() {
         val latch = CountDownLatch(1)
         var yes = false
         main.post {
-            log("아이리스(확인): $question")
+            log("민규(확인): $question")
             status("확인 중… $question")
             speaker.speak(question) {
                 beep()
@@ -191,7 +191,7 @@ class IrisService : Service() {
     // ---------------- 알림/상태 ----------------
 
     private fun createChannel() {
-        val ch = NotificationChannel(CHANNEL, "아이리스 대기", NotificationManager.IMPORTANCE_LOW)
+        val ch = NotificationChannel(CHANNEL, "민규 대기", NotificationManager.IMPORTANCE_LOW)
         ch.setShowBadge(false)
         getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
     }
@@ -205,7 +205,7 @@ class IrisService : Service() {
             PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_mic)
-            .setContentTitle("아이리스")
+            .setContentTitle("민규")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)

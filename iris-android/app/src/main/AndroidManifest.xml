@@ -26,7 +26,7 @@
     </queries>
 
     <application
-        android:label="아이리스"
+        android:label="민규"
         android:icon="@drawable/ic_iris"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">

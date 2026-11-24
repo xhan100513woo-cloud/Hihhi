@@ -136,7 +136,7 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
             else -> "오류: 알 수 없는 도구 $name"
         }
     } catch (e: SecurityException) {
-        "오류: 권한이 없습니다(${e.message}). 아이리스 앱에서 권한을 허용해야 합니다."
+        "오류: 권한이 없습니다(${e.message}). 민규 앱에서 권한을 허용해야 합니다."
     } catch (e: Exception) {
         Log.e("Iris", "tool $name failed", e)
         "오류: ${e.javaClass.simpleName}: ${e.message}"
@@ -240,7 +240,7 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
 
     private fun setAlarm(i: Map<String, Any?>): String {
         val h = i.i("hour")!!; val m = i.i("minute")!!
-        val label = i.s("label") ?: "아이리스 알람"
+        val label = i.s("label") ?: "민규 알람"
         val days = (i["days"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }.orEmpty()
         if (Root.available()) {
             val cmd = buildString {
@@ -264,7 +264,7 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
 
     private fun setTimer(i: Map<String, Any?>): String {
         val sec = i.i("seconds")!!
-        val label = i.s("label") ?: "아이리스 타이머"
+        val label = i.s("label") ?: "민규 타이머"
         if (Root.available()) {
             val r = Root.run("am start -a android.intent.action.SET_TIMER --ei android.intent.extra.alarm.LENGTH $sec " +
                 "--es android.intent.extra.alarm.MESSAGE ${Root.shellQuote(label)} --ez android.intent.extra.alarm.SKIP_UI true", 20)
@@ -339,14 +339,14 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
         val label = try {
             ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString()
         } catch (_: PackageManager.NameNotFoundException) { return "오류: 설치되지 않은 앱" }
-        if (pkg == ctx.packageName) return "오류: 아이리스 자신은 삭제할 수 없습니다"
+        if (pkg == ctx.packageName) return "오류: 민규 자신은 삭제할 수 없습니다"
         if (!confirmer.confirm("$label 앱을 삭제할까요?")) return "사용자가 삭제를 취소함"
         val r = Root.run("pm uninstall ${Root.shellQuote(pkg)}", 60)
         return if (r.ok) "$label 삭제 완료" else "삭제 실패: ${r.summary(500)}"
     }
 
     private fun runRoot(command: String, reason: String?): String {
-        if (!Root.available()) return "오류: 루트 권한 없음 (Magisk 에서 아이리스에 루트 허용 필요)"
+        if (!Root.available()) return "오류: 루트 권한 없음 (Magisk 에서 민규에 루트 허용 필요)"
         if (prefs.confirmDangerous && !isReadOnly(command)) {
             val q = (reason?.takeIf { it.isNotBlank() } ?: "명령을 실행") + "할까요?"
             if (!confirmer.confirm(q)) return "사용자가 실행을 취소함"

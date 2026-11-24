@@ -40,7 +40,7 @@ class GeminiAgent(private val prefs: Prefs, private val tools: PhoneTools) : Ass
     @Synchronized
     override fun ask(userText: String): String {
         val key = prefs.geminiKey
-        if (key.isBlank()) return "아직 API 키가 없어요. 아이리스 앱을 열어서 Gemini API 키를 넣어 주세요."
+        if (key.isBlank()) return "아직 API 키가 없어요. 민규 앱을 열어서 Gemini API 키를 넣어 주세요."
 
         val now = System.currentTimeMillis()
         if (now - lastTurnAt > 5 * 60_000 || history.length() > 60) clear()

@@ -17,30 +17,40 @@ import org.vosk.android.SpeechService
 private const val TAG = "Iris"
 
 /**
- * 오프라인(Vosk)으로 계속 듣다가 "아이리스" 가 들리면 onWake 를 호출한다.
- * 이 한국어 모델에는 [unk] 토큰이 없어서 문법 제한 대신 전체 받아쓰기를 하며 호출어를 찾는다.
+ * 오프라인(Vosk)으로 계속 듣다가 "민규" 가 들리면 onWake 를 호출한다.
+ *
+ * "민규"는 두 글자라 그냥 받아쓰기로는 "민국", "민수", "인규" 같은 말과 구별이 안 된다.
+ * 그래서 문법 모드를 쓴다: 호출어와 비슷한 단어를 포함한 약 4천 개의 짧은 단어(assets/wake_distractors.txt)
+ * 중에서만 고르게 하면, 진짜 "민규"일 때만 호출어 단어가 선택된다.
+ * (합성 음성 시험: 호출 7/7 감지, 일반 문장 18개 오감지 0)
  */
 class WakeWordListener(
-    private val model: Model,
-    private val maxDistance: () -> Int,
+    context: Context,
+    model: Model,
     private val onHeard: (String) -> Unit,
     private val onWake: () -> Unit,
 ) {
     private var service: SpeechService? = null
     private val main = Handler(Looper.getMainLooper())
+    private val recognizer: Recognizer
+
+    init {
+        val distractors = context.assets.open("wake_distractors.txt").bufferedReader().readLines()
+            .map { it.trim() }.filter { it.isNotEmpty() && it !in WAKE_WORDS }
+        val grammar = org.json.JSONArray(WAKE_WORDS + distractors).toString()
+        recognizer = Recognizer(model, 16000f, grammar)
+    }
 
     val isRunning get() = service != null
 
     fun start() {
         if (service != null) return
         try {
-            val rec = Recognizer(model, 16000f)
-            val s = SpeechService(rec, 16000f)
+            recognizer.reset()
+            val s = SpeechService(recognizer, 16000f)
             service = s
             s.startListening(object : org.vosk.android.RecognitionListener {
-                override fun onPartialResult(hypothesis: String?) {
-                    check(hypothesis, "partial")
-                }
+                override fun onPartialResult(hypothesis: String?) { check(hypothesis, "partial") }
                 override fun onResult(hypothesis: String?) { check(hypothesis, "text") }
                 override fun onFinalResult(hypothesis: String?) { check(hypothesis, "text") }
                 override fun onError(e: Exception?) {
@@ -62,7 +72,7 @@ class WakeWordListener(
         val text = try { JSONObject(json).optString(key) } catch (_: Exception) { "" }
         if (text.isEmpty()) return
         onHeard(text)
-        if (isWakeWord(text, maxDistance())) {
+        if (isWakeWord(text)) {
             Log.i(TAG, "wake word: $text")
             stop()
             main.post(onWake)
@@ -77,54 +87,10 @@ class WakeWordListener(
     }
 
     companion object {
-        /**
-         * 오프라인 모델은 "아이리스"를 "아이디스", "하이 리스크" 등으로 받아쓰는 경우가 많다.
-         * 그래서 자모 단위 편집거리로 비슷한 발음을 찾는다. 시험 결과 호출은 거리 0~2, 일반 문장은 3 이상이었다.
-         */
-        fun isWakeWord(text: String, maxDistance: Int): Boolean = distance(text) <= maxDistance
+        /** 문법 모드 출력에서 호출어로 인정할 단어. "민균"은 "민규"가 자주 이렇게 인식돼서 포함 */
+        val WAKE_WORDS = listOf("민규", "민균")
 
-        private val TARGET = jamo("아이리스")
-
-        fun distance(text: String): Int {
-            var best = Int.MAX_VALUE
-            val candidates = listOf(text.replace(" ", "")) + text.split(' ').filter { it.isNotBlank() }
-            for (w in candidates) {
-                val j = jamo(w)
-                for (len in TARGET.size - 1..TARGET.size + 1) {
-                    if (j.size < len) { best = minOf(best, levenshtein(j, TARGET)); continue }
-                    for (start in 0..j.size - len) best = minOf(best, levenshtein(j.subList(start, start + len), TARGET))
-                }
-            }
-            return best
-        }
-
-        private const val CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
-        private const val JUNG = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ"
-        private const val JONG = " ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ"
-
-        private fun jamo(s: String): List<Char> {
-            val out = ArrayList<Char>()
-            for (ch in s) {
-                val c = ch.code - 0xAC00
-                if (c !in 0 until 11172) continue
-                out += CHO[c / 588]; out += JUNG[(c % 588) / 28]
-                if (c % 28 != 0) out += JONG[c % 28]
-            }
-            return out
-        }
-
-        private fun levenshtein(a: List<Char>, b: List<Char>): Int {
-            var prev = IntArray(b.size + 1) { it }
-            for (i in 1..a.size) {
-                val cur = IntArray(b.size + 1)
-                cur[0] = i
-                for (j in 1..b.size) {
-                    cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1)
-                }
-                prev = cur
-            }
-            return prev[b.size]
-        }
+        fun isWakeWord(text: String) = text.split(' ').any { it in WAKE_WORDS }
     }
 }
 

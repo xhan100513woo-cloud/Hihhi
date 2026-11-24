@@ -56,7 +56,7 @@ class MainActivity : Activity() {
     private fun refresh() {
         statusView.text = "상태: ${IrisService.lastStatus}" +
             if (IrisService.running && IrisService.lastHeard.isNotEmpty()) "\n방금 들린 말: \"${IrisService.lastHeard}\"" else ""
-        toggle.text = if (IrisService.running) "아이리스 끄기" else "아이리스 켜기"
+        toggle.text = if (IrisService.running) "민규 끄기" else "민규 켜기"
         logView.text = synchronized(IrisService.logLines) { IrisService.logLines.takeLast(20).joinToString("\n\n") }
     }
 
@@ -72,8 +72,8 @@ class MainActivity : Activity() {
             setPadding(0, pad / 2, 0, pad / 4)
         }.also { col.addView(it) }
 
-        label("아이리스", 28f, true)
-        label("화면이 꺼져 있어도 \"아이리스\"라고 부르면 대답해요.", 14f)
+        label("민규", 28f, true)
+        label("화면이 꺼져 있어도 \"민규\"라고 부르면 대답해요.", 14f)
 
         statusView = label("상태: -", 15f, true)
         toggle = Button(this).apply {
@@ -127,12 +127,6 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, c -> prefs.autoStart = c }
         }
         col.addView(auto)
-        val sensitive = CheckBox(this).apply {
-            text = "호출어 민감하게 (잘 못 알아들으면 켜고, 아무 때나 반응하면 끄세요)"
-            isChecked = prefs.wakeDistance >= 2
-            setOnCheckedChangeListener { _, c -> prefs.wakeDistance = if (c) 2 else 1 }
-        }
-        col.addView(sensitive)
 
         col.addView(Button(this).apply {
             text = "설정 저장"
@@ -159,7 +153,7 @@ class MainActivity : Activity() {
                 val t = testEdit.text.toString().trim()
                 if (t.isEmpty()) return@setOnClickListener
                 if (!IrisService.running) {
-                    Toast.makeText(this@MainActivity, "먼저 아이리스를 켜 주세요", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "먼저 민규를 켜 주세요", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 startService(Intent(this@MainActivity, IrisService::class.java)
