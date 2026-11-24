@@ -9,8 +9,6 @@ import android.os.BatteryManager
 import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.util.Log
-import com.anthropic.core.JsonValue
-import com.anthropic.models.messages.Tool
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -25,13 +23,21 @@ fun interface Confirmer {
     fun confirm(question: String): Boolean
 }
 
-/** Claude 가 쓸 수 있는 휴대폰 기능들(도구). */
+/** AI 종류와 무관한 도구 정의. props 는 JSON Schema 조각. */
+data class ToolSpec(
+    val name: String,
+    val description: String,
+    val props: Map<String, Map<String, Any>>,
+    val required: List<String>,
+)
+
+/** AI 가 쓸 수 있는 휴대폰 기능들(도구). */
 class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val confirmer: Confirmer) {
 
     private val zone: ZoneId get() = ZoneId.systemDefault()
     private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd(E) HH:mm")
 
-    val tools: List<Tool> = listOf(
+    val specs: List<ToolSpec> = listOf(
         tool(
             "create_calendar_event",
             "휴대폰 기본 캘린더(삼성 캘린더/구글 캘린더)에 일정을 추가한다. 시간은 기기 현지 시각 ISO 형식(예: 2026-11-25T15:00).",
@@ -63,8 +69,8 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
             "시계 앱에 알람을 맞춘다.",
             mapOf(
                 "hour" to int("0-23"), "minute" to int("0-59"), "label" to str("알람 이름"),
-                "days" to JsonValue.from(mapOf("type" to "array", "items" to mapOf("type" to "integer"),
-                    "description" to "반복 요일. 1=일 2=월 3=화 4=수 5=목 6=금 7=토. 생략하면 한 번만")),
+                "days" to mapOf("type" to "array", "items" to mapOf("type" to "integer"),
+                    "description" to "반복 요일. 1=일 2=월 3=화 4=수 5=목 6=금 7=토. 생략하면 한 번만"),
             ),
             listOf("hour", "minute"),
         ),
@@ -103,6 +109,12 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
             listOf("command"),
         ),
         tool("get_device_status", "배터리, 충전 상태, 루트 여부를 확인한다.", emptyMap(), emptyList()),
+        tool(
+            "get_weather",
+            "현재 날씨와 3일 예보를 조회한다(무료 Open-Meteo).",
+            mapOf("location" to str("도시/지역 이름. 영어 권장(예: Seoul, Busan, Jeju)")),
+            listOf("location"),
+        ),
     )
 
     /** 도구 실행. 반환값은 Claude 에게 돌려줄 결과 문자열. */
@@ -120,6 +132,7 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
             "uninstall_app" -> uninstall(input.s("package")!!)
             "run_root_command" -> runRoot(input.s("command")!!, input.s("reason"))
             "get_device_status" -> deviceStatus()
+            "get_weather" -> Weather.lookup(input.s("location")!!)
             else -> "오류: 알 수 없는 도구 $name"
         }
     } catch (e: SecurityException) {
@@ -364,18 +377,11 @@ class PhoneTools(private val ctx: Context, private val prefs: Prefs, private val
     private fun Map<String, Any?>.b(k: String) = this[k] as? Boolean
 
     companion object {
-        private fun str(d: String) = JsonValue.from(mapOf("type" to "string", "description" to d))
-        private fun int(d: String) = JsonValue.from(mapOf("type" to "integer", "description" to d))
-        private fun bool(d: String) = JsonValue.from(mapOf("type" to "boolean", "description" to d))
+        private fun str(d: String): Map<String, Any> = mapOf("type" to "string", "description" to d)
+        private fun int(d: String): Map<String, Any> = mapOf("type" to "integer", "description" to d)
+        private fun bool(d: String): Map<String, Any> = mapOf("type" to "boolean", "description" to d)
 
-        private fun tool(name: String, desc: String, props: Map<String, JsonValue>, required: List<String>): Tool {
-            val p = Tool.InputSchema.Properties.builder()
-            props.forEach { (k, v) -> p.putAdditionalProperty(k, v) }
-            return Tool.builder()
-                .name(name)
-                .description(desc)
-                .inputSchema(Tool.InputSchema.builder().properties(p.build()).required(required).build())
-                .build()
-        }
+        private fun tool(name: String, desc: String, props: Map<String, Map<String, Any>>, required: List<String>) =
+            ToolSpec(name, desc, props, required)
     }
 }

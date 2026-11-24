@@ -33,7 +33,9 @@ class IrisService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
     private lateinit var prefs: Prefs
     private lateinit var speaker: Speaker
-    private lateinit var agent: IrisAgent
+    private lateinit var gemini: GeminiAgent
+    private lateinit var claude: ClaudeAgent
+    private val agent: Assistant get() = if (prefs.provider == Prefs.PROVIDER_CLAUDE) claude else gemini
     private var model: Model? = null
     private var wake: WakeWordListener? = null
     private var command: CommandListener? = null
@@ -47,7 +49,9 @@ class IrisService : Service() {
         running = true
         prefs = Prefs(this)
         speaker = Speaker(this)
-        agent = IrisAgent(prefs, PhoneTools(this, prefs, ::confirmByVoice))
+        val tools = PhoneTools(this, prefs, ::confirmByVoice)
+        gemini = GeminiAgent(prefs, tools)
+        claude = ClaudeAgent(prefs, tools)
         createChannel()
         startInForeground("준비 중…")
 
