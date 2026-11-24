@@ -72,7 +72,7 @@ class IrisService : Service() {
                 val m = Model(ModelManager.modelDir(this).absolutePath)
                 main.post {
                     model = m
-                    wake = WakeWordListener(m) { onWakeWord() }
+                    wake = WakeWordListener(m, { prefs.wakeDistance }, { heard(it) }) { onWakeWord() }
                     command = CommandListener(this, m)
                     startWaiting()
                 }
@@ -123,7 +123,7 @@ class IrisService : Service() {
     private fun listenCommand() {
         command?.listen { text ->
             when {
-                text == null -> speaker.speak("잘 못 들었어요.") { startWaiting() }
+                text == null -> { log("(호출 후 아무 말도 못 알아들음)"); startWaiting() }
                 isCancel(text) -> speaker.speak("네.") { startWaiting() }
                 else -> handleCommand(text)
             }
@@ -229,6 +229,11 @@ class IrisService : Service() {
         }
     }
 
+    private fun heard(text: String) {
+        lastHeard = text
+        listener?.invoke()
+    }
+
     private fun log(line: String) {
         synchronized(logLines) {
             logLines += line
@@ -248,6 +253,8 @@ class IrisService : Service() {
 
         @Volatile var running = false
         @Volatile var lastStatus = "꺼짐"
+        /** 대기 중 마이크로 들린 말(진단용) */
+        @Volatile var lastHeard = ""
         val logLines = mutableListOf<String>()
         /** 화면(MainActivity) 갱신용 */
         var listener: (() -> Unit)? = null

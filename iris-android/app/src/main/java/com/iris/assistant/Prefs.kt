@@ -35,6 +35,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("auto_start", true)
         set(v) = sp.edit().putBoolean("auto_start", v).apply()
 
+    /** 호출어 민감도: 허용하는 발음 차이(자모 편집거리). 2=잘 알아들음(기본), 1=덜 민감 */
+    var wakeDistance: Int
+        get() = sp.getInt("wake_distance", 2)
+        set(v) = sp.edit().putInt("wake_distance", v).apply()
+
     /** 루트 명령 실행 전 음성으로 확인받기 */
     var confirmDangerous: Boolean
         get() = sp.getBoolean("confirm_dangerous", true)

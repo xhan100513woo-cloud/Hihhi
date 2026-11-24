@@ -54,7 +54,8 @@ class MainActivity : Activity() {
     }
 
     private fun refresh() {
-        statusView.text = "상태: ${IrisService.lastStatus}"
+        statusView.text = "상태: ${IrisService.lastStatus}" +
+            if (IrisService.running && IrisService.lastHeard.isNotEmpty()) "\n방금 들린 말: \"${IrisService.lastHeard}\"" else ""
         toggle.text = if (IrisService.running) "아이리스 끄기" else "아이리스 켜기"
         logView.text = synchronized(IrisService.logLines) { IrisService.logLines.takeLast(20).joinToString("\n\n") }
     }
@@ -126,6 +127,12 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, c -> prefs.autoStart = c }
         }
         col.addView(auto)
+        val sensitive = CheckBox(this).apply {
+            text = "호출어 민감하게 (잘 못 알아들으면 켜고, 아무 때나 반응하면 끄세요)"
+            isChecked = prefs.wakeDistance >= 2
+            setOnCheckedChangeListener { _, c -> prefs.wakeDistance = if (c) 2 else 1 }
+        }
+        col.addView(sensitive)
 
         col.addView(Button(this).apply {
             text = "설정 저장"
