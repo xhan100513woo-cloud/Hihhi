@@ -30,6 +30,7 @@ const GREET_CHANNELS = channelList(process.env.GREET_CHANNELS, "메인정보방"
 const { welcomeMessage, greetMessage } = require("./welcome");
 const LOCATION_CHANNELS = channelList(process.env.LOCATION_CHANNELS, "내위치");    // 내위치 → 10진법 좌표
 const LOC = require("./location");
+const CITY = require("./cities");
 // 위치 페이지 주소: PUBLIC_URL 또는 Railway 가 만들어 주는 도메인
 const PUBLIC_URL = (clean(process.env.PUBLIC_URL) ||
   (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + clean(process.env.RAILWAY_PUBLIC_DOMAIN) : "")).replace(/\/+$/, "");
@@ -315,6 +316,11 @@ function register(client, withMessageContent, withMembers) {
     if (route.kind === "battleCmd") {
       try { await handleBattleCommand(msg, route.cmd); }
       catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
+      return;
+    }
+    if (route.kind === "city" || route.kind === "cityList") {
+      try { await msg.reply(route.kind === "city" ? CITY.cityEmbed(route.city) : CITY.cityListMessage()); }
+      catch (e) { console.error(`❌ 도시 좌표 응답 실패 (#${ch.name}):`, e.message); }
       return;
     }
     if (route.kind === "location") {

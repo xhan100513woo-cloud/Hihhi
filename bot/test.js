@@ -256,6 +256,24 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   const { routeMessage } = require("./router");
   assert.deepStrictEqual(routeMessage({ name: "내위치", id: "1" }, "내위치", { dex: [], pvp: [], battle: [], location: ["내위치"] }), { kind: "location" });
   assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "내위치", { dex: ["포켓몬개체정보방"], pvp: [], battle: [], location: ["내위치"] }), null);
+  // 도시 핵심 장소
+  const CITY = require("./cities");
+  assert.ok(CITY.CITIES.length >= 50);
+  for (const c of CITY.CITIES) {
+    assert.ok(c.places.length >= 3, "장소 부족 " + c.ko);
+    for (const p of c.places) assert.ok(L.cleanCoords(p.lat, p.lng), p.name);
+    const e = CITY.cityEmbed(c).embeds[0];
+    assert.ok(e.description.length <= 4096 && e.title.length <= 256);
+  }
+  const ny = CITY.findCity("뉴욕");
+  assert.ok(ny && ny.en.includes("New York") && CITY.findCity("NYC") === ny && CITY.findCity("new york") === ny);
+  assert.ok(ny.places.some((p) => p.name.includes("자유의 여신상")));
+  assert.ok(CITY.findCity("서울") && CITY.findCity("도쿄") && CITY.findCity("파리"));
+  assert.strictEqual(CITY.findCity("뉴욕 가고싶다"), null);
+  assert.ok(CITY.cityEmbed(ny).embeds[0].description.startsWith("**1. "));
+  assert.strictEqual(routeMessage({ name: "내위치", id: "1" }, "뉴욕", { dex: [], pvp: [], battle: [], location: ["내위치"] }).kind, "city");
+  assert.strictEqual(routeMessage({ name: "내위치", id: "1" }, "도시목록", { dex: [], pvp: [], battle: [], location: ["내위치"] }).kind, "cityList");
+  assert.ok(CITY.cityListMessage().content.length <= 2000);
   console.log("위치 테스트 통과");
 })().catch((e) => { console.error(e); process.exit(1); });
 
