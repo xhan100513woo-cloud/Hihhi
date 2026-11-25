@@ -28,6 +28,12 @@ const FC = require("./friendcode");
 const NOTICE_CHANNELS = channelList(process.env.NOTICE_CHANNELS, "공지");           // 새 멤버 환영 메시지
 const GREET_CHANNELS = channelList(process.env.GREET_CHANNELS, "메인정보방");      // 새 멤버 짧은 인사
 const { welcomeMessage, greetMessage } = require("./welcome");
+const LOCATION_CHANNELS = channelList(process.env.LOCATION_CHANNELS, "내위치");    // 내위치 → 10진법 좌표
+const LOC = require("./location");
+const CITY = require("./cities");
+// 위치 페이지 주소: PUBLIC_URL 또는 Railway 가 만들어 주는 도메인
+const PUBLIC_URL = (clean(process.env.PUBLIC_URL) ||
+  (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + clean(process.env.RAILWAY_PUBLIC_DOMAIN) : "")).replace(/\/+$/, "");
 const { routeMessage } = require("./router");
 const BR = require("./battle-request");
 
@@ -42,6 +48,8 @@ console.log("⚙️ 설정 확인:",
   `FRIEND_CHANNELS=${FRIEND_CHANNELS.join(",")}`,
   `NOTICE_CHANNELS=${NOTICE_CHANNELS.join(",")}`,
   `GREET_CHANNELS=${GREET_CHANNELS.join(",")}`,
+  `LOCATION_CHANNELS=${LOCATION_CHANNELS.join(",")}`,
+  `PUBLIC_URL=${PUBLIC_URL || "없음"}`,
   `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN 이 설정되지 않았습니다. Railway → Variables 에 DISCORD_TOKEN 을 추가해 주세요.");
@@ -93,6 +101,7 @@ function reportGuild(g) {
     ["🤝 친코등록", FRIEND_CHANNELS, "FRIEND_CHANNELS"],
     ["👋 환영(공지)", NOTICE_CHANNELS, "NOTICE_CHANNELS"],
     ["👋 인사(메인)", GREET_CHANNELS, "GREET_CHANNELS"],
+    ["📍 내위치", LOCATION_CHANNELS, "LOCATION_CHANNELS"],
   ]) {
     const chans = find(list);
     if (chans.size) console.log(`${label} 서버 '${g.name}': ${chans.map((c) => "#" + c.name).join(", ")}`);
@@ -302,11 +311,21 @@ function register(client, withMessageContent, withMembers) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
-    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS, friend: FRIEND_CHANNELS });
+    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS, friend: FRIEND_CHANNELS, location: LOCATION_CHANNELS });
     if (!route) return;
     if (route.kind === "battleCmd") {
       try { await handleBattleCommand(msg, route.cmd); }
       catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
+      return;
+    }
+    if (route.kind === "city" || route.kind === "cityList") {
+      try { await msg.reply(route.kind === "city" ? CITY.cityEmbed(route.city) : CITY.cityListMessage()); }
+      catch (e) { console.error(`❌ 도시 좌표 응답 실패 (#${ch.name}):`, e.message); }
+      return;
+    }
+    if (route.kind === "location") {
+      try { await msg.reply(LOC.promptMessage()); }
+      catch (e) { console.error(`❌ 내위치 응답 실패 (#${ch.name}):`, e.message); }
       return;
     }
     if (route.kind === "friend") {
@@ -340,7 +359,7 @@ function register(client, withMessageContent, withMembers) {
     if (GUILD_ID) await c.application.commands.set(commands, GUILD_ID);
     else await c.application.commands.set(commands);
     console.log(`✅ ${c.user.tag} 로그인 완료 · 명령어 ${commands.length}개 등록 (${GUILD_ID ? "서버 " + GUILD_ID : "전역"})`);
-    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")} · 획득경로: ${ACQ_CHANNELS.join(", ")} · 일정: ${SCHEDULE_CHANNELS.join(", ")} · 친코: ${FRIEND_CHANNELS.join(", ")} · 환영: ${withMembers ? [...NOTICE_CHANNELS, ...GREET_CHANNELS].join(", ") : "꺼짐(SERVER MEMBERS INTENT 필요)"}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
+    if (withMessageContent) console.log(`👀 도감번호: ${DEX_CHANNELS.join(", ")} · 배틀개체: ${PVP_CHANNELS.join(", ")} · 배틀신청: ${BATTLE_CHANNELS.join(", ")} · 획득경로: ${ACQ_CHANNELS.join(", ")} · 일정: ${SCHEDULE_CHANNELS.join(", ")} · 친코: ${FRIEND_CHANNELS.join(", ")} · 내위치: ${LOCATION_CHANNELS.join(", ")} · 환영: ${withMembers ? [...NOTICE_CHANNELS, ...GREET_CHANNELS].join(", ") : "꺼짐(SERVER MEMBERS INTENT 필요)"}${WEBHOOK ? " · 응답은 웹훅으로 전송" : ""}`);
     else console.log("⚠️ 슬래시 명령어 전용 모드 (MESSAGE CONTENT INTENT 를 켜면 채널 감지가 동작합니다)");
     for (const g of c.guilds.cache.values()) reportGuild(g);
   });
@@ -360,6 +379,11 @@ function register(client, withMessageContent, withMembers) {
         return it.respond([]);
       }
       if (it.isButton()) {
+        if (it.customId === "loc:req") {
+          if (!PUBLIC_URL) return await it.reply({ ...LOC.noDomainMessage(), flags: MessageFlags.Ephemeral });
+          const token = LOC.createToken({ userId: it.user.id, displayName: it.member?.displayName || it.user.username, channelId: it.channelId });
+          return await it.reply({ ...LOC.linkMessage(`${PUBLIC_URL}/loc?t=${token}`), flags: MessageFlags.Ephemeral });
+        }
         const b = FC.parseButtonId(it.customId);
         if (b) return await handleFriendButton(it, b);
         return;
@@ -391,3 +415,11 @@ function register(client, withMessageContent, withMembers) {
 }
 
 start(true, true);
+
+// 위치 페이지 웹 서버 (Railway 가 PORT 를 알려 줌)
+LOC.startServer(Number(process.env.PORT) || 8080, async (info, coords) => {
+  const ch = await client.channels.fetch(info.channelId);
+  await ch.send(LOC.postMessage(info, coords));
+  console.log(`📍 ${info.displayName} 위치 게시 (#${ch.name})`);
+});
+console.log(`🌐 위치 페이지 서버: 포트 ${Number(process.env.PORT) || 8080}${PUBLIC_URL ? " · " + PUBLIC_URL : " (공개 주소 없음 → Railway 에서 Generate Domain 필요)"}`);
