@@ -7,17 +7,23 @@
 //  - 포켓몬고일정     : 현재일정 / 다음일정
 //  - 친코등록         : 친코등록 12자리 / 친코확인 닉네임
 //  - 내위치           : 내위치 → 1회용 위치 링크 / 도시 이름 → 핵심 장소 좌표 / 도시목록
+//  - 교환             : 교환 / 교환목록 / 교환신청 / 교환완료 / 완료목록 / 교환취소
 const P = require("./pogo");
 const BR = require("./battle-request");
 const { parseScheduleCommand } = require("./schedule");
 const { parseFriendCommand } = require("./friendcode");
 const { isLocationCommand } = require("./location");
 const CITY = require("./cities");
+const { parseTradeCommand } = require("./trade");
 
 /**
  * @returns {{kind:"battleCmd",cmd}|{kind:"pvp",q}|{kind:"acq",q}|{kind:"dex",q}|null}
  */
-function routeMessage(channel, content, { dex, pvp, battle, acq = [], schedule = [], friend = [], location = [] }) {
+function routeMessage(channel, content, { dex, pvp, battle, acq = [], schedule = [], friend = [], location = [], trade = [] }) {
+  if (P.channelMatches(channel, trade)) {
+    const cmd = parseTradeCommand(content, (s) => !!P.parseNameQuery(s));
+    if (cmd) return { kind: "trade", cmd };
+  }
   if (P.channelMatches(channel, location)) {
     if (isLocationCommand(content)) return { kind: "location" };
     if (CITY.isCityListCommand(content)) return { kind: "cityList" };

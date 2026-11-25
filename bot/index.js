@@ -31,6 +31,8 @@ const { welcomeMessage, greetMessage } = require("./welcome");
 const LOCATION_CHANNELS = channelList(process.env.LOCATION_CHANNELS, "내위치");    // 내위치 → 10진법 좌표
 const LOC = require("./location");
 const CITY = require("./cities");
+const TRADE_CHANNELS = channelList(process.env.TRADE_CHANNELS, "교환");             // 포켓몬 교환 게시판
+const TR = require("./trade");
 // 위치 페이지 주소: PUBLIC_URL 또는 Railway 가 만들어 주는 도메인
 const PUBLIC_URL = (clean(process.env.PUBLIC_URL) ||
   (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + clean(process.env.RAILWAY_PUBLIC_DOMAIN) : "")).replace(/\/+$/, "");
@@ -49,6 +51,7 @@ console.log("⚙️ 설정 확인:",
   `NOTICE_CHANNELS=${NOTICE_CHANNELS.join(",")}`,
   `GREET_CHANNELS=${GREET_CHANNELS.join(",")}`,
   `LOCATION_CHANNELS=${LOCATION_CHANNELS.join(",")}`,
+  `TRADE_CHANNELS=${TRADE_CHANNELS.join(",")}`,
   `PUBLIC_URL=${PUBLIC_URL || "없음"}`,
   `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
@@ -102,6 +105,7 @@ function reportGuild(g) {
     ["👋 환영(공지)", NOTICE_CHANNELS, "NOTICE_CHANNELS"],
     ["👋 인사(메인)", GREET_CHANNELS, "GREET_CHANNELS"],
     ["📍 내위치", LOCATION_CHANNELS, "LOCATION_CHANNELS"],
+    ["🔁 교환", TRADE_CHANNELS, "TRADE_CHANNELS"],
   ]) {
     const chans = find(list);
     if (chans.size) console.log(`${label} 서버 '${g.name}': ${chans.map((c) => "#" + c.name).join(", ")}`);
@@ -138,7 +142,7 @@ async function fetchHistory(channel) {
     for (const m of page.values()) {
       const buttonIds = [];
       for (const row of m.components || []) for (const c of row.components || []) if (c.customId) buttonIds.push(c.customId);
-      msgs.push({ authorId: m.author.id, content: m.content, time: m.createdTimestamp, buttonIds });
+      msgs.push({ id: m.id, authorId: m.author.id, content: m.content, time: m.createdTimestamp, buttonIds });
     }
     if (page.size < 100) break;
     before = page.last().id;
@@ -154,6 +158,74 @@ async function loadRequests(channel) {
 async function loadFriendCode(channel, userId) {
   const enc = FC.findRegistration(await fetchHistory(channel), channel.client.user.id, userId);
   return enc ? FC.decrypt(enc, FRIEND_SECRET) : null;
+}
+
+/** 채널 기록에서 교환 상태 읽기 */
+async function loadTrades(channel) {
+  return TR.buildTradeState(await fetchHistory(channel), channel.client.user.id);
+}
+
+/** 교환 / 교환목록 / 교환신청 / 교환완료 / 완료목록 / 교환취소 */
+async function handleTradeCommand(msg, cmd) {
+  const me = { id: msg.author.id, displayName: msg.member?.displayName || msg.author.username };
+  if (cmd.type === "register") {
+    if (!cmd.give || !cmd.want) return msg.reply(TR.info("❌ `교환 주는포켓몬 받는포켓몬` 처럼 적어 주세요. 예) `교환 레쿠쟈 암멍이`"));
+    return msg.reply(TR.registerMessage(me, cmd.give, cmd.want));
+  }
+  const st = await loadTrades(msg.channel);
+  if (cmd.type === "list") return msg.reply(TR.listMessage(st));
+  if (cmd.type === "doneList") return msg.reply(TR.doneListMessage(st));
+  if (cmd.type === "lookup") {
+    const r = await resolveMember(msg, cmd.query, null);
+    if (r.member) return msg.reply(TR.memberListMessage(st, r.member));
+    const byPokemon = TR.pokemonListMessage(st, cmd.query);
+    if (byPokemon) return msg.reply(byPokemon);
+    return msg.reply(TR.info(`❌ '${cmd.query}' 멤버나 포켓몬의 교환을 찾을 수 없어요. 등록은 \`교환 주는포켓몬 받는포켓몬\` 이에요.`));
+  }
+  if (cmd.type === "cancel") {
+    const mine = TR.openOffers(st).filter((o) => o.owner === me.id);
+    const target = cmd.pokemon ? mine.filter((o) => o.give.toLowerCase().replace(/\s+/g, "") === cmd.pokemon.toLowerCase().replace(/\s+/g, "")).pop()
+      : mine.length === 1 ? mine[0] : null;
+    if (!target) return msg.reply(TR.info(mine.length ? "❓ 취소할 포켓몬을 적어 주세요. 예) `교환취소 레쿠쟈`" : "❌ 등록한 교환이 없어요."));
+    return msg.reply(TR.cancelMessage(target));
+  }
+  if (cmd.type === "request") {
+    const r = await resolveMember(msg, cmd.member, me.id);
+    if (!r.member) {
+      const text = r.error === "self" ? "😅 내 교환에는 신청할 수 없어요." : r.error === "bot" ? "🤖 봇에게는 신청할 수 없어요."
+        : BR.requestMessage(r, cmd.member, me).content;
+      return msg.reply(TR.info(text));
+    }
+    const offer = TR.findOffer(st, r.member.id, cmd.pokemon);
+    if (!offer) {
+      return msg.reply(TR.info(`❌ **${r.member.displayName}** 님의 ${cmd.pokemon ? `'${cmd.pokemon}' ` : ""}교환을 찾을 수 없어요. \`교환 ${r.member.displayName}\` 으로 목록을 확인해 보세요.`));
+    }
+    return msg.reply(TR.requestMessage(offer, r.member.id, me));
+  }
+  if (cmd.type === "confirm") {
+    let list = TR.activeTrades(st, me.id);
+    if (cmd.query) {
+      const r = await resolveMember(msg, cmd.query, me.id);
+      if (r.member) list = list.filter((t) => t.owner === r.member.id || t.requester === r.member.id);
+    }
+    if (!list.length) return msg.reply(TR.info("❌ 진행 중인 교환이 없어요. (상대가 수락한 교환만 완료할 수 있어요)"));
+    if (list.length > 1) return msg.reply(TR.info("❓ 진행 중인 교환이 여러 개예요. `교환완료 상대닉네임` 으로 적어 주세요."));
+    const t = list[0];
+    if (t.confirms.has(me.id)) return msg.reply(TR.info("✔️ 이미 교환완료를 입력했어요. 상대방이 입력하면 완료돼요."));
+    const other = me.id === t.owner ? t.requester : t.owner;
+    return msg.reply(TR.confirmMessage(t, me, t.confirms.has(other)));
+  }
+}
+
+/** 교환 수락/거절 버튼: 등록한 본인만 */
+async function handleTradeButton(it, b) {
+  if (it.user.id !== b.owner) return it.reply({ content: "🙅 교환을 등록한 본인만 누를 수 있어요.", flags: MessageFlags.Ephemeral });
+  const owner = { id: it.user.id, displayName: it.member?.displayName || it.user.username };
+  if (b.action === "reject") return it.update(TR.rejectedMessage(owner, b.requester));
+  const st = await loadTrades(it.channel);
+  const offer = st.offers.get(b.offerId);
+  if (!offer || offer.status !== "open") return it.update({ content: "⚠️ 이미 완료되었거나 취소된 교환이에요.", components: [] });
+  return it.update(TR.acceptedMessage(it.message.id, offer, owner, b.requester));
 }
 
 /** 친코등록 / 친코확인 */
@@ -311,11 +383,16 @@ function register(client, withMessageContent, withMembers) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
-    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS, friend: FRIEND_CHANNELS, location: LOCATION_CHANNELS });
+    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS, friend: FRIEND_CHANNELS, location: LOCATION_CHANNELS, trade: TRADE_CHANNELS });
     if (!route) return;
     if (route.kind === "battleCmd") {
       try { await handleBattleCommand(msg, route.cmd); }
       catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
+      return;
+    }
+    if (route.kind === "trade") {
+      try { await handleTradeCommand(msg, route.cmd); }
+      catch (e) { console.error(`❌ 교환 응답 실패 (#${ch.name}):`, e.message); }
       return;
     }
     if (route.kind === "city" || route.kind === "cityList") {
@@ -384,6 +461,8 @@ function register(client, withMessageContent, withMembers) {
           const token = LOC.createToken({ userId: it.user.id, displayName: it.member?.displayName || it.user.username, channelId: it.channelId });
           return await it.reply({ ...LOC.linkMessage(`${PUBLIC_URL}/loc?t=${token}`), flags: MessageFlags.Ephemeral });
         }
+        const tb = TR.parseButtonId(it.customId);
+        if (tb) return await handleTradeButton(it, tb);
         const b = FC.parseButtonId(it.customId);
         if (b) return await handleFriendButton(it, b);
         return;

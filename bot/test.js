@@ -169,6 +169,68 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.deepStrictEqual(g.allowedMentions.users, ["42"]);
 }
 
+// 포켓몬 교환
+{
+  const TR = require("./trade");
+  const isP = (x) => !!P.parseNameQuery(x);
+  assert.deepStrictEqual(TR.parseTradeCommand("교환 레쿠쟈 암멍이", isP), { type: "register", give: "레쿠쟈", want: "암멍이" });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환 홍길동", isP), { type: "lookup", query: "홍길동" });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환목록"), { type: "list" });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환 목록"), { type: "list" });
+  assert.deepStrictEqual(TR.parseTradeCommand("완료목록"), { type: "doneList" });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환완료"), { type: "confirm", query: null });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환신청 홍길동 레쿠쟈"), { type: "request", member: "홍길동", pokemon: "레쿠쟈" });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환신청 홍 길동 레쿠쟈"), { type: "request", member: "홍 길동", pokemon: "레쿠쟈" });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환취소 레쿠쟈"), { type: "cancel", pokemon: "레쿠쟈" });
+  assert.deepStrictEqual(TR.parseTradeCommand("교환 이로치 레쿠쟈 암멍이", isP), { type: "register", give: "이로치", want: "레쿠쟈 암멍이" });
+  assert.strictEqual(TR.parseTradeCommand("안녕"), null);
+  assert.strictEqual(TR.parseTradeCommand("교환 <@1> **x**", isP).give, "1");                  // 멘션·서식 문자 제거
+
+  // 왕복: 등록 → 목록 → 신청 → 수락 → 한 명만 완료(미완료) → 둘 다 완료 → 완료목록
+  const BOT = "9", A = { id: "1", displayName: "철수" }, B = { id: "2", displayName: "영희" };
+  const hist = []; let t = 0;
+  const post = (id, m) => hist.push({ id, authorId: BOT, content: m.content, time: ++t });
+  post("100", TR.registerMessage(A, "레쿠쟈", "암멍이"));
+  post("101", TR.registerMessage(A, "뮤츠", "뮤"));
+  hist.push({ id: "102", authorId: "2", content: TR.registerMessage(B, "가짜", "가짜").content, time: ++t });   // 사람이 쓴 건 무시
+  let st = TR.buildTradeState(hist, BOT);
+  assert.strictEqual(TR.openOffers(st).length, 2);
+  assert.ok(TR.listMessage(st).content.includes("**레쿠쟈** 줌 → **암멍이** 받음"));
+  assert.ok(TR.memberListMessage(st, A).content.includes("뮤츠"));
+  assert.strictEqual(TR.findOffer(st, "1", "레쿠쟈").id, "100");
+  assert.strictEqual(TR.findOffer(st, "1", null), null);                                        // 등록이 2개면 포켓몬 지정 필요
+  const req = TR.requestMessage(TR.findOffer(st, "1", "레쿠쟈"), A.id, B);
+  assert.ok(req.content.startsWith("<@1>") && req.content.includes("교환을 수락하시겠습니까?"));
+  assert.deepStrictEqual(TR.parseButtonId(req.components[0].components[0].custom_id), { action: "accept", offerId: "100", owner: "1", requester: "2" });
+  const acc = TR.acceptedMessage("200", st.offers.get("100"), A, B.id);
+  assert.ok(acc.content.includes("교환을 진행해주세요."));
+  post("200", acc);
+  st = TR.buildTradeState(hist, BOT);
+  assert.strictEqual(TR.activeTrades(st, "2").length, 1);
+  post("201", TR.confirmMessage(st.trades.get("200"), A, false));                                  // 철수만 완료
+  st = TR.buildTradeState(hist, BOT);
+  assert.ok(TR.doneListMessage(st).content.includes("아직"));                                        // 한 명만 → 완료목록에 없음
+  assert.strictEqual(TR.openOffers(st).length, 2);
+  const last = TR.confirmMessage(st.trades.get("200"), B, true);
+  assert.ok(last.content.includes("🎉 교환 완료!"));
+  post("202", last);
+  st = TR.buildTradeState(hist, BOT);
+  assert.ok(st.trades.get("200").done);
+  assert.ok(TR.doneListMessage(st).content.includes("<@1> **레쿠쟈** ↔ <@2> **암멍이**"));
+  assert.deepStrictEqual(TR.openOffers(st).map((o) => o.id), ["101"]);                           // 완료된 등록은 목록에서 빠짐
+  assert.strictEqual(TR.activeTrades(st, "2").length, 0);
+  // 취소
+  post("203", TR.cancelMessage(st.offers.get("101")));
+  st = TR.buildTradeState(hist, BOT);
+  assert.strictEqual(TR.openOffers(st).length, 0);
+  assert.ok(TR.listMessage(st).content.includes("등록된 교환이 없어요"));
+  // 라우팅
+  const { routeMessage } = require("./router");
+  const cfg = { dex: ["포켓몬개체정보방"], pvp: [], battle: [], trade: ["교환"] };
+  assert.strictEqual(routeMessage({ name: "교환", id: "1" }, "교환 레쿠쟈 암멍이", cfg).kind, "trade");
+  assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "교환목록", cfg), null);
+}
+
 // 친구 코드
 {
   const FC = require("./friendcode");
