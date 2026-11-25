@@ -33,6 +33,7 @@ const LOC = require("./location");
 const CITY = require("./cities");
 const TRADE_CHANNELS = channelList(process.env.TRADE_CHANNELS, "교환");             // 포켓몬 교환 게시판
 const TR = require("./trade");
+const CP_CHANNELS = channelList(process.env.CP_CHANNELS, "cp계산기");             // 리자몽 10/10/10 30 → CP
 // 위치 페이지 주소: PUBLIC_URL 또는 Railway 가 만들어 주는 도메인
 const PUBLIC_URL = (clean(process.env.PUBLIC_URL) ||
   (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + clean(process.env.RAILWAY_PUBLIC_DOMAIN) : "")).replace(/\/+$/, "");
@@ -52,6 +53,7 @@ console.log("⚙️ 설정 확인:",
   `GREET_CHANNELS=${GREET_CHANNELS.join(",")}`,
   `LOCATION_CHANNELS=${LOCATION_CHANNELS.join(",")}`,
   `TRADE_CHANNELS=${TRADE_CHANNELS.join(",")}`,
+  `CP_CHANNELS=${CP_CHANNELS.join(",")}`,
   `PUBLIC_URL=${PUBLIC_URL || "없음"}`,
   `BATTLE_CHANNELS=${BATTLE_CHANNELS.join(",")}`);
 if (!DISCORD_TOKEN) {
@@ -106,6 +108,7 @@ function reportGuild(g) {
     ["👋 인사(메인)", GREET_CHANNELS, "GREET_CHANNELS"],
     ["📍 내위치", LOCATION_CHANNELS, "LOCATION_CHANNELS"],
     ["🔁 교환", TRADE_CHANNELS, "TRADE_CHANNELS"],
+    ["🧮 CP계산기", CP_CHANNELS, "CP_CHANNELS"],
   ]) {
     const chans = find(list);
     if (chans.size) console.log(`${label} 서버 '${g.name}': ${chans.map((c) => "#" + c.name).join(", ")}`);
@@ -383,11 +386,22 @@ function register(client, withMessageContent, withMembers) {
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot || !msg.guild) return;
     const ch = msg.channel;
-    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS, friend: FRIEND_CHANNELS, location: LOCATION_CHANNELS, trade: TRADE_CHANNELS });
+    const route = routeMessage(ch, msg.content, { dex: DEX_CHANNELS, pvp: PVP_CHANNELS, battle: BATTLE_CHANNELS, acq: ACQ_CHANNELS, schedule: SCHEDULE_CHANNELS, friend: FRIEND_CHANNELS, location: LOCATION_CHANNELS, trade: TRADE_CHANNELS, cp: CP_CHANNELS });
     if (!route) return;
     if (route.kind === "battleCmd") {
       try { await handleBattleCommand(msg, route.cmd); }
       catch (e) { console.error(`❌ 배틀신청 응답 실패 (#${ch.name}):`, e.message); }
+      return;
+    }
+    if (route.kind === "cp") {
+      try {
+        if (route.error) await msg.reply({ content: route.error, allowedMentions: { parse: [], repliedUser: false } });
+        else {
+          const { ephemeral, ...payload } = !route.q.valid ? badForm(route.q.id)
+            : cpEmbed(String(route.q.id), ...route.iv, route.level, route.q.form ? String(route.q.form) : undefined);
+          await msg.reply({ ...payload, allowedMentions: { parse: [], repliedUser: false } });
+        }
+      } catch (e) { console.error(`❌ CP 계산 응답 실패 (#${ch.name}):`, e.message); }
       return;
     }
     if (route.kind === "trade") {

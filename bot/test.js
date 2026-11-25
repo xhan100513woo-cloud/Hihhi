@@ -169,6 +169,23 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   assert.deepStrictEqual(g.allowedMentions.users, ["42"]);
 }
 
+// CP 계산기 채널
+{
+  const { parseCpCommand } = require("./cpcalc");
+  const r = parseCpCommand("리자몽 10/10/10 30");
+  assert.deepStrictEqual([r.q.id, r.iv, r.level], [6, [10, 10, 10], 30]);
+  assert.strictEqual(require("./embeds").cpEmbed("6", 10, 10, 10, 30).embeds[0].fields[0].value, "**2362**");   // 공식으로 직접 확인한 값
+  assert.deepStrictEqual(parseCpCommand("888-2 15 15 15 레벨50").q, { id: 888, form: 2, valid: true });
+  assert.strictEqual(parseCpCommand("뮤츠 15/14/15").level, 40);                       // 레벨 생략 → 40
+  assert.strictEqual(parseCpCommand("리자몽 10/10/10 30.5").level, 30.5);
+  assert.ok(parseCpCommand("피카츄 16/1/1 30").error && parseCpCommand("리자몽 1/1/1 52").error);
+  for (const t of ["안녕 10/10/10 30", "오늘 3/4 만나", "리자몽 잡았다"]) assert.strictEqual(parseCpCommand(t), null, t);
+  const { routeMessage } = require("./router");
+  assert.strictEqual(routeMessage({ name: "cp계산기", id: "1" }, "리자몽 10/10/10 30", { dex: [], pvp: [], battle: [], cp: ["cp계산기"] }).kind, "cp");
+  assert.strictEqual(routeMessage({ name: "CP계산기", id: "1" }, "6 15/15/15 40", { dex: [], pvp: [], battle: [], cp: ["cp계산기"] }).kind, "cp");
+  assert.strictEqual(routeMessage({ name: "포켓몬개체정보방", id: "1" }, "리자몽 10/10/10 30", { dex: ["포켓몬개체정보방"], pvp: [], battle: [], cp: ["cp계산기"] }), null);
+}
+
 // 포켓몬 교환
 {
   const TR = require("./trade");
