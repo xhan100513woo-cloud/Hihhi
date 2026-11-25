@@ -8,6 +8,7 @@
 //  - 친코등록         : 친코등록 12자리 / 친코확인 닉네임
 //  - 내위치           : 내위치 → 1회용 위치 링크 / 도시 이름 → 핵심 장소 좌표 / 도시목록
 //  - 교환             : 교환 / 교환목록 / 교환신청 / 교환완료 / 완료목록 / 교환취소
+//  - cp계산기         : 포켓몬 공/방/체 레벨 → CP
 const P = require("./pogo");
 const BR = require("./battle-request");
 const { parseScheduleCommand } = require("./schedule");
@@ -15,11 +16,16 @@ const { parseFriendCommand } = require("./friendcode");
 const { isLocationCommand } = require("./location");
 const CITY = require("./cities");
 const { parseTradeCommand } = require("./trade");
+const { parseCpCommand } = require("./cpcalc");
 
 /**
  * @returns {{kind:"battleCmd",cmd}|{kind:"pvp",q}|{kind:"acq",q}|{kind:"dex",q}|null}
  */
-function routeMessage(channel, content, { dex, pvp, battle, acq = [], schedule = [], friend = [], location = [], trade = [] }) {
+function routeMessage(channel, content, { dex, pvp, battle, acq = [], schedule = [], friend = [], location = [], trade = [], cp = [] }) {
+  if (P.channelMatches(channel, cp)) {
+    const r = parseCpCommand(content);
+    if (r) return { kind: "cp", ...r };
+  }
   if (P.channelMatches(channel, trade)) {
     const cmd = parseTradeCommand(content, (s) => !!P.parseNameQuery(s));
     if (cmd) return { kind: "trade", cmd };
