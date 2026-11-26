@@ -1,6 +1,6 @@
 "use strict";
 // 포켓몬 GO 도감 디스코드 봇
-const { Client, Events, GatewayIntentBits, MessageFlags } = require("discord.js");
+const { Client, Events, GatewayIntentBits, MessageFlags, ChannelType, PermissionFlagsBits } = require("discord.js");
 const commands = require("./commands");
 const { dexEmbed, cpEmbed, ivEmbed, battleEmbed, badForm } = require("./embeds");
 const P = require("./pogo");
@@ -33,6 +33,7 @@ const LOC = require("./location");
 const CITY = require("./cities");
 const TRADE_CHANNELS = channelList(process.env.TRADE_CHANNELS, "교환");             // 포켓몬 교환 게시판
 const TR = require("./trade");
+const DECO = require("./decorate");
 const CP_CHANNELS = channelList(process.env.CP_CHANNELS, "cp계산기");             // 리자몽 10/10/10 30 → CP
 // 위치 페이지 주소: PUBLIC_URL 또는 Railway 가 만들어 주는 도메인
 const PUBLIC_URL = (clean(process.env.PUBLIC_URL) ||
@@ -161,6 +162,52 @@ async function loadRequests(channel) {
 async function loadFriendCode(channel, userId) {
   const enc = FC.findRegistration(await fetchHistory(channel), channel.client.user.id, userId);
   return enc ? FC.decrypt(enc, FRIEND_SECRET) : null;
+}
+
+/** /채널꾸미기: 포켓몬 테마로 이름·설명·카테고리 정리 (관리자만) */
+async function runDecorate(it) {
+  if (!it.memberPermissions?.has(PermissionFlagsBits.ManageChannels))
+    return it.reply({ content: "🙅 채널 관리 권한이 있는 관리자만 쓸 수 있어요.", flags: MessageFlags.Ephemeral });
+  await it.deferReply({ flags: MessageFlags.Ephemeral });
+  try { return await decorateGuild(it); }
+  catch (e) {
+    console.error("❌ 채널 꾸미기 실패:", e.message);
+    return it.editReply({ content: "❌ 채널 꾸미기 중 오류가 났어요: " + e.message + "\n봇 역할에 **채널 관리** 권한이 있는지 확인해 주세요." });
+  }
+}
+
+async function decorateGuild(it) {
+  const guild = it.guild;
+  const all = await guild.channels.fetch();
+  const channels = [...all.values()].filter(Boolean).map((c) => ({
+    id: c.id, name: c.name, parentId: c.parentId,
+    type: c.type === ChannelType.GuildCategory ? "category" : c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement ? "text" : "other",
+  }));
+  const lists = { NOTICE: NOTICE_CHANNELS, GREET: GREET_CHANNELS, DEX: DEX_CHANNELS, ACQ: ACQ_CHANNELS, CP: CP_CHANNELS,
+    SCHEDULE: SCHEDULE_CHANNELS, PVP: PVP_CHANNELS, BATTLE: BATTLE_CHANNELS, TRADE: TRADE_CHANNELS, FRIEND: FRIEND_CHANNELS, LOCATION: LOCATION_CHANNELS };
+  const plan = DECO.planDecoration(channels, lists, it.options.getBoolean("없는채널만들기") === true);
+  const errors = [], catId = {};
+  for (const c of plan.categories) {
+    if (c.existingId) {
+      catId[c.key] = c.existingId;
+      await guild.channels.edit(c.existingId, { name: c.name }).catch((e) => errors.push(`카테고리 ${c.name}: ${e.message}`));
+    } else {
+      try { catId[c.key] = (await guild.channels.create({ name: c.name, type: ChannelType.GuildCategory })).id; }
+      catch (e) { errors.push(`카테고리 ${c.name}: ${e.message}`); }
+    }
+  }
+  for (const e of plan.edits) {
+    try {
+      // lockPermissions: false → 공지방처럼 따로 정한 채널 권한은 그대로 유지
+      await guild.channels.edit(e.id, { name: e.name, topic: e.topic, parent: catId[e.categoryKey] ?? undefined, lockPermissions: false, position: e.position });
+    } catch (err) { errors.push(`#${e.from}: ${err.message}`); }
+  }
+  for (const m of plan.missing.filter((x) => x.create)) {
+    try { await guild.channels.create({ name: m.name, type: ChannelType.GuildText, topic: m.topic, parent: catId[m.categoryKey], position: m.position }); }
+    catch (err) { errors.push(`#${m.name} 만들기: ${err.message}`); }
+  }
+  console.log(`🎨 '${guild.name}' 채널 꾸미기: 변경 ${plan.edits.length}, 오류 ${errors.length}`);
+  return it.editReply({ content: DECO.reportMessage(plan, errors) });
 }
 
 /** 채널 기록에서 교환 상태 읽기 */
@@ -489,6 +536,7 @@ function register(client, withMessageContent, withMembers) {
       else if (it.commandName === "cp")
         reply = cpEmbed(q, o.getInteger("공격"), o.getInteger("방어"), o.getInteger("체력"), o.getNumber("레벨") ?? 40, form);
       else if (it.commandName === "배틀") reply = battleEmbed(q, form);
+    else if (it.commandName === "채널꾸미기") return await runDecorate(it);
     else if (it.commandName === "일정") reply = await scheduleReply(o.getString("종류") === "다음" ? "upcoming" : "current");
     else if (it.commandName === "획득") {
       const id = P.findId(q);

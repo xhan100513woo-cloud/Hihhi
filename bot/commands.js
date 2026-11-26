@@ -2,7 +2,7 @@
 // 슬래시 명령어 정의
 const pokemon = (o) => o.setName("포켓몬").setDescription("도감번호 또는 이름 (예: 6, 리자몽)").setRequired(true).setAutocomplete(true);
 const form = (o) => o.setName("폼").setDescription("모습 번호(1=기본, 2부터 변화 모습) 또는 이름 (예: 2, 알로라, 메가)");
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType } = require("discord.js");
 
 module.exports = [
   new SlashCommandBuilder().setName("도감").setDescription("포켓몬 GO 정보: 타입, 약점·강점 속성, 최대 CP")
@@ -29,4 +29,8 @@ module.exports = [
   new SlashCommandBuilder().setName("일정").setDescription("포켓몬 GO 일정 (현재 진행 중 / 다가오는 일정)")
     .addStringOption((o) => o.setName("종류").setDescription("현재 또는 다음 (기본: 현재)")
       .addChoices({ name: "현재 진행 중", value: "현재" }, { name: "다가오는 일정", value: "다음" })),
+  new SlashCommandBuilder().setName("채널꾸미기").setDescription("(관리자) 채널 이름·설명·카테고리를 포켓몬 테마로 정리")
+    .addBooleanOption((o) => o.setName("없는채널만들기").setDescription("서버에 없는 기능 채널을 새로 만들지 (기본: 만들지 않음)"))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+    .setContexts(InteractionContextType.Guild),
 ].map((c) => c.toJSON());

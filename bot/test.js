@@ -5,7 +5,7 @@ const commands = require("./commands");
 const { dexEmbed, cpEmbed, ivEmbed } = require("./embeds");
 const P = require("./pogo");
 
-assert.strictEqual(commands.length, 6);
+assert.strictEqual(commands.length, 7);
 
 // 배틀 개체 순위
 for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 150], ["배틀리자몽", 6], ["배틀하자", null], ["배틀", null], ["111배틀", null]])
@@ -167,6 +167,40 @@ for (const [txt, want] of [["배틀111", 111], ["배틀 6", 6], ["배틀#150", 1
   const g = W.greetMessage({ id: "42" });
   assert.strictEqual(g.content, "<@42> 어서오세요~ 공지방가서 공지한번만 읽어주세요~ 봇사용법 나와있습니다~");
   assert.deepStrictEqual(g.allowedMentions.users, ["42"]);
+}
+
+// 채널 꾸미기
+{
+  const D = require("./decorate");
+  const lists = { NOTICE: ["공지"], GREET: ["메인정보방"], DEX: ["포켓몬개체정보방"], ACQ: ["포켓몬획득정보"], CP: ["cp계산기"],
+    SCHEDULE: ["포켓몬고일정"], PVP: ["배틀개체정보방"], BATTLE: ["배틀신청"], TRADE: ["교환"], FRIEND: ["친코등록"], LOCATION: ["내위치"] };
+  const ch = [
+    { id: "c1", name: "포켓몬센터", type: "category" },
+    { id: "1", name: "공지방", type: "text" }, { id: "2", name: "메인정보방", type: "text" },
+    { id: "3", name: "포켓몬개체정보방", type: "text" }, { id: "4", name: "배틀개체정보방", type: "text" },
+    { id: "5", name: "배틀신청방", type: "text" }, { id: "6", name: "💬｜잡담", type: "text" },
+  ];
+  const plan = D.planDecoration(ch, lists);
+  assert.deepStrictEqual(plan.categories.map((c) => [c.key, c.existingId]), [["포켓몬센터", "c1"], ["오박사연구소", null], ["포켓몬체육관", null], ["트레이너광장", null]]);
+  const byId = Object.fromEntries(plan.edits.map((e) => [e.id, e]));
+  assert.strictEqual(byId["1"].name, "📢｜공지방");
+  assert.strictEqual(byId["3"].name, "📕｜포켓몬개체정보방");
+  assert.strictEqual(byId["4"].categoryKey, "포켓몬체육관");
+  assert.strictEqual(byId["5"].name, "⚔️｜배틀신청");
+  assert.ok(!byId["6"]);                                                               // 관계없는 채널은 그대로
+  assert.strictEqual(plan.missing.length, 6);                                          // 서버에 없는 기능 채널
+  assert.ok(plan.missing.every((m) => !m.create));
+  assert.ok(D.planDecoration(ch, lists, true).missing.every((m) => m.create));
+  // 꾸민 뒤 이름도 각 기능 목록에 그대로 매칭되는지 (봇 기능 유지)
+  for (const g of D.LAYOUT) for (const c of g.channels) {
+    assert.ok(P.channelMatches({ name: c.name, id: "x" }, lists[c.list]), c.name);
+    assert.ok(c.topic.length <= 1024 && c.name.length <= 100);
+  }
+  // 이미 꾸민 채널에 다시 실행해도 같은 결과
+  const again = D.planDecoration([{ id: "3", name: "📕｜포켓몬개체정보방", type: "text" }], lists);
+  assert.strictEqual(again.edits[0].name, "📕｜포켓몬개체정보방");
+  const rep = D.reportMessage(plan, []);
+  assert.ok(rep.includes("공지방 → #📢｜공지방") && rep.includes("건너뜀") && rep.length <= 2000);
 }
 
 // CP 계산기 채널
